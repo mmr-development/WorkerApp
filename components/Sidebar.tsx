@@ -53,9 +53,9 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
     }
   };
 
-  const navigateToHome = () => {
-    router.push('/');
-    onClose();
+  const handlePageNavigation = (path: string) => {
+    router.push(path);
+    onClose(); // Collapse the sidebar when navigating to a page
   };
 
   return (
@@ -86,45 +86,35 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
 
         <ScrollView style={styles.sidebarLinks}>
           {/* Orders button - redirects to home */}
-          <TouchableOpacity style={styles.sidebarLink} onPress={navigateToHome}>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/')}>
             <Ionicons name="list" size={24} color={COLORS.text} />
             <Text style={styles.sidebarLinkText}>Orders</Text>
           </TouchableOpacity>
           
-          <Link href="/shifts" asChild>
-            <TouchableOpacity style={styles.sidebarLink}>
-              <Ionicons name="calendar" size={24} color="#1B5E20" />
-              <Text style={styles.sidebarLinkText}>Shifts</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/shifts')}>
+            <Ionicons name="calendar" size={24} color="#1B5E20" />
+            <Text style={styles.sidebarLinkText}>Shifts</Text>
+          </TouchableOpacity>
           
-          <Link href="/map" asChild>
-            <TouchableOpacity style={styles.sidebarLink}>
-              <Ionicons name="map" size={24} color="#1B5E20" />
-              <Text style={styles.sidebarLinkText}>Map</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/map')}>
+            <Ionicons name="map" size={24} color="#1B5E20" />
+            <Text style={styles.sidebarLinkText}>Map</Text>
+          </TouchableOpacity>
           
-          <Link href="/support" asChild>
-            <TouchableOpacity style={styles.sidebarLink}>
-              <Ionicons name="help-circle" size={24} color="#1B5E20" />
-              <Text style={styles.sidebarLinkText}>Support</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/support')}>
+            <Ionicons name="help-circle" size={24} color="#1B5E20" />
+            <Text style={styles.sidebarLinkText}>Support</Text>
+          </TouchableOpacity>
 
-          <Link href="/history" asChild>
-            <TouchableOpacity style={styles.sidebarLink}>
-              <Ionicons name="time" size={24} color={COLORS.text} />
-              <Text style={styles.sidebarLinkText}>History</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/history')}>
+            <Ionicons name="time" size={24} color={COLORS.text} />
+            <Text style={styles.sidebarLinkText}>History</Text>
+          </TouchableOpacity>
           
-          <Link href="/settings" asChild>
-            <TouchableOpacity style={styles.sidebarLink}>
-              <Ionicons name="settings" size={24} color="#1B5E20" />
-              <Text style={styles.sidebarLinkText}>Settings</Text>
-            </TouchableOpacity>
-          </Link>
+          <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/settings')}>
+            <Ionicons name="settings" size={24} color="#1B5E20" />
+            <Text style={styles.sidebarLinkText}>Settings</Text>
+          </TouchableOpacity>
         </ScrollView>
 
         <View style={localStyles.shiftButtonContainer}>
@@ -133,7 +123,7 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
               localStyles.shiftButton,
               { backgroundColor: shiftActive ? '#e53935' : '#2cb673' }
             ]}
-            onPress={toggleShift}
+            onPress={toggleShift} // Do not collapse the sidebar when toggling the shift
           >
             <Ionicons 
               name={shiftActive ? "stop-circle" : "play-circle"} 
