@@ -158,8 +158,6 @@ export default function SettingsScreen() {
               {isLoggedIn ? "Log Out" : "Log In"}
             </Text>
           </TouchableOpacity>
-
-          {/* Clear Order History Button */}
           <TouchableOpacity 
             style={[styles.loginButton, { backgroundColor: "#e53935", marginTop: 20 }]}
             onPress={clearOrderHistory}

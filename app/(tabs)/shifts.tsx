@@ -151,11 +151,7 @@ export default function ShiftsScreen() {
         style={[
           styles.calendarDayRow,
           { 
-            backgroundColor: isToday 
-              ? COLORS.backgroundDarker 
-              : isVacationDay 
-                ? '#e8f5fa' // Light blue background for vacation days
-                : 'transparent' 
+            backgroundColor: 'transparent'
           }
         ]}
       >
@@ -522,23 +518,19 @@ export default function ShiftsScreen() {
                     setVacationEnd(value);
                     const days = calculateVacationDays(vacationStart, value);
                     setVacationDuration(days);
-                    
-                    // Check for conflicts with confirmed shifts
                     const start = dayjs(vacationStart);
                     const end = dayjs(value);
-                    setVacationConflict(null); // Reset conflicts
+                    setVacationConflict(null);
                     
                     // Find any scheduled shifts in this period
                     for (const shift of upcomingShifts) {
                       if (shift.status !== 'Scheduled') continue;
                       
                       const shiftDate = dayjs(shift.date);
-                      if (shiftDate.isAfter(start) || shiftDate.isSame(start, 'day')) {
-                        if (shiftDate.isBefore(end) || shiftDate.isSame(end, 'day')) {
-                          // Found a conflict
-                          setVacationConflict(dayjs(shift.date).format('DD/MM/YYYY'));
-                          break;
-                        }
+                      if ((shiftDate.isAfter(start) || shiftDate.isSame(start, 'day')) && 
+                          (shiftDate.isBefore(end) || shiftDate.isSame(end, 'day'))) {
+                        setVacationConflict(dayjs(shift.date).format('DD/MM/YYYY'));
+                        break;
                       }
                     }
                   }}
