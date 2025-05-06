@@ -822,7 +822,6 @@ calendarShiftDuration: {
   fontSize: 13,
   fontWeight: 'bold',
 },
-
 modalContent: {
   backgroundColor: COLORS.white,
   borderRadius: 10,
