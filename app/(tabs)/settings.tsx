@@ -8,6 +8,7 @@ import { useSidebar } from '@/hooks/useSidebar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const USER_DATA_KEY = 'worker_app_user_data';
+const ORDER_HISTORY_KEY = 'worker_app_order_history'; // Import the same key used in history.tsx
 
 export default function SettingsScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
@@ -19,7 +20,6 @@ export default function SettingsScreen() {
     city: 'Odense'
   });
 
-  // Load user login state and data on component mount
   useEffect(() => {
     loadUserData();
   }, []);
@@ -73,15 +73,36 @@ export default function SettingsScreen() {
         ]
       );
     } else {
-      // In a real app, this would show a login screen
       setIsLoggedIn(true);
       saveUserData();
     }
   };
 
+  const clearOrderHistory = async () => {
+    Alert.alert(
+      "Clear Order History",
+      "Are you sure you want to delete all order history? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Clear", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(ORDER_HISTORY_KEY);
+              Alert.alert("Success", "Order history has been cleared.");
+            } catch (error) {
+              console.error('Error clearing order history:', error);
+              Alert.alert("Error", "Failed to clear order history.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <ThemedView style={styles.container}>
-      {/* Main content - Settings */}
       <View style={styles.mainContent}>
         <TouchableOpacity 
           style={styles.toggleButton}
@@ -93,7 +114,6 @@ export default function SettingsScreen() {
         <Text style={styles.welcomeText}>Settings</Text>
         
         <ScrollView style={styles.settingsList} contentContainerStyle={styles.settingsContentContainer}>
-          {/* User Information */}
           <View style={styles.userInfoContainer}>
             <Ionicons name="person-circle" size={60} color="#1B5E20" />
             <View style={styles.userTextInfo}>
@@ -109,7 +129,6 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Notifications Toggle */}
           <View style={styles.settingItem}>
             <View style={styles.settingTextContainer}>
               <Ionicons name="notifications" size={24} color="#1B5E20" />
@@ -123,7 +142,6 @@ export default function SettingsScreen() {
             />
           </View>
           
-          {/* Login/Logout Button */}
           <TouchableOpacity 
             style={[
               styles.loginButton, 
@@ -140,10 +158,16 @@ export default function SettingsScreen() {
               {isLoggedIn ? "Log Out" : "Log In"}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.loginButton, { backgroundColor: "#e53935", marginTop: 20 }]}
+            onPress={clearOrderHistory}
+          >
+            <Ionicons name="trash" size={24} color="white" />
+            <Text style={styles.loginButtonText}>Clear Order History</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
-      {/* Sidebar Component */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
   );

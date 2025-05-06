@@ -40,10 +40,10 @@ export default function HomeScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const router = useRouter();
   const [currentOrder, setCurrentOrder] = useState<OrderDetails | null>({
-    id: "#A1B2C3", // Changed to 6 random characters in uppercase preceded by #
+    id: "#A1B2C3",
     restaurant: {
       name: "Burger Palace",
-      address: "123 Main St, Odense",
+      address: "Alfavej 502, Odense",
       distance: 2.3,
       phoneNumber: "+45 12 34 56 78"
     },
