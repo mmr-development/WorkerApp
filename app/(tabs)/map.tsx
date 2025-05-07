@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, Alert, Button, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, Alert, Button, TouchableOpacity, Modal, Text } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -81,7 +81,8 @@ export default function MapScreen() {
   const [heading, setHeading] = useState<number | null>(null);
   const [followUser, setFollowUser] = useState(true);
   const [lastCheck, setLastCheck] = useState(Date.now());
-  const [arrivedAlertShown, setArrivedAlertShown] = useState(false);
+  const [arrivedModalVisible, setArrivedModalVisible] = useState(false);
+  const [hasArrived, setHasArrived] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -158,15 +159,24 @@ export default function MapScreen() {
             distanceInterval: 0,
           },
           (loc) => {
-            const { latitude, longitude, heading: newHeading } = loc.coords;
+            const { latitude, longitude, heading: newHeading, speed } = loc.coords;
             setUserLocation({ latitude, longitude });
-            setHeading(newHeading ?? heading ?? 0);
+
+            // Only update heading if moving (speed > 0.5 m/s)
+            setHeading((prevHeading) => {
+              if (typeof speed === "number" && speed > 0.5 && typeof newHeading === "number" && !isNaN(newHeading)) {
+                return newHeading;
+              }
+              return prevHeading ?? 0;
+            });
 
             // Only recenter if followUser is true
             if (followUser) {
               mapRef.current?.animateCamera({
                 center: { latitude, longitude },
-                heading: newHeading ?? heading ?? 0,
+                heading: (typeof speed === "number" && speed > 0.5 && typeof newHeading === "number" && !isNaN(newHeading))
+                  ? newHeading
+                  : heading ?? 0,
                 pitch: 0,
                 zoom: 17,
               });
@@ -243,21 +253,14 @@ export default function MapScreen() {
   }, [userLocation, routeCoords, micropoints, destination]);
 
   useEffect(() => {
-    if (!userLocation || !destination) return;
+    if (!userLocation || !destination || hasArrived) return;
     // Check arrival on every location update
     const distanceToTarget = getDistance(userLocation, destination);
-    if (distanceToTarget <= 10 && !arrivedAlertShown) {
-      setArrivedAlertShown(true);
-      Alert.alert(
-        "You have arrived",
-        "You are within 10 meters of your destination.",
-        [
-          { text: "Remain on map", onPress: () => setArrivedAlertShown(false), style: "cancel" },
-          { text: "Return to orders", onPress: () => router.replace("/") }
-        ]
-      );
+    if (distanceToTarget <= 10) {
+      setArrivedModalVisible(true);
+      setHasArrived(true);
     }
-  }, [userLocation, destination, arrivedAlertShown, router]);
+  }, [userLocation, destination, hasArrived]);
 
   if (loading || !region) {
     return (
@@ -269,7 +272,6 @@ export default function MapScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Sidebar toggle button in top left */}
       <TouchableOpacity style={styles.toggleButton} onPress={toggleSidebar}>
         <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
       </TouchableOpacity>
@@ -290,7 +292,7 @@ export default function MapScreen() {
             coordinate={userLocation}
             title="You"
             pinColor="blue"
-            rotation={180}
+            rotation={followUser ? 180 : (heading ?? 0)} // Lock to 180 when following, else use heading
             anchor={{ x: 0.5, y: 0.5 }}
           />
         )}
@@ -299,14 +301,12 @@ export default function MapScreen() {
         )}
         {routeCoords.length > 0 && userLocation && (
           <>
-            {/* Already passed route: transparent */}
             <Polyline
               coordinates={routeCoords.slice(0, getClosestPointIndex(userLocation, routeCoords) + 1)}
               strokeWidth={4}
               strokeColor="rgba(255,0,0,0.2)"
               zIndex={1}
             />
-            {/* Remaining route: solid */}
             <Polyline
               coordinates={routeCoords.slice(getClosestPointIndex(userLocation, routeCoords))}
               strokeWidth={4}
@@ -318,11 +318,52 @@ export default function MapScreen() {
       </MapView>
       {!followUser && (
         <View style={{ position: 'absolute', top: 40, right: 20 }}>
-          <Button title="Recenter" onPress={() => setFollowUser(true)} />
+          <Button
+            title="Recenter"
+            onPress={() => {
+              setFollowUser(true);
+              if (userLocation) {
+                mapRef.current?.animateCamera({
+                  center: userLocation,
+                  heading: heading ?? 0,
+                  pitch: 0,
+                  zoom: 17,
+                });
+              }
+            }}
+          />
         </View>
       )}
       {/* Sidebar */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
+
+      {/* Arrived Modal */}
+      <Modal
+        visible={arrivedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setArrivedModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 12 }}>You have arrived</Text>
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              <Button
+                title="Remain on map"
+                onPress={() => setArrivedModalVisible(false)}
+              />
+              <View style={{ width: 12 }} />
+              <Button
+                title="Return to orders"
+                onPress={() => {
+                  setArrivedModalVisible(false);
+                  router.replace("/");
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -346,5 +387,18 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    minWidth: 250,
   },
 });
