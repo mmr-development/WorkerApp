@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, Alert, Button } from 'react-native';
-import MapView, { Marker, Polyline, MapViewProps } from 'react-native-maps';
+import { View, StyleSheet, Dimensions, ActivityIndicator, Alert, Button, TouchableOpacity } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Sidebar } from '@/components/Sidebar';
+import { useSidebar } from '@/hooks/useSidebar';
+import { COLORS } from '../../styles';
 
 const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 
@@ -10,15 +14,74 @@ const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 type LatLng = { latitude: number; longitude: number };
 type Region = LatLng & { latitudeDelta: number; longitudeDelta: number };
 
+// Helper: Haversine distance in meters
+function getDistance(a: LatLng, b: LatLng) {
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const R = 6371e3;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const aVal =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1 - aVal));
+  return R * c;
+}
+
+// Helper: interpolate points every 10m between two coordinates
+function interpolatePoints(a: LatLng, b: LatLng, step = 10): LatLng[] {
+  const dist = getDistance(a, b);
+  if (dist <= 20) return [];
+  const points: LatLng[] = [];
+  const steps = Math.floor(dist / step);
+  for (let i = 1; i < steps; i++) {
+    const fraction = i / steps;
+    const lat = a.latitude + (b.latitude - a.latitude) * fraction;
+    const lng = a.longitude + (b.longitude - a.longitude) * fraction;
+    points.push({ latitude: lat, longitude: lng });
+  }
+  return points;
+}
+
+// Helper: generate micropoints for the whole route
+function generateMicropoints(route: LatLng[]): LatLng[] {
+  let micropoints: LatLng[] = [];
+  for (let i = 0; i < route.length - 1; i++) {
+    micropoints = micropoints.concat(interpolatePoints(route[i], route[i + 1]));
+  }
+  return micropoints;
+}
+
+// Helper: find index of closest point on route to user
+function getClosestPointIndex(user: LatLng, route: LatLng[]) {
+  let minDist = Infinity;
+  let minIdx = 0;
+  for (let i = 0; i < route.length; i++) {
+    const dist = getDistance(user, route[i]);
+    if (dist < minDist) {
+      minDist = dist;
+      minIdx = i;
+    }
+  }
+  return minIdx;
+}
+
 export default function MapScreen() {
   const { address } = useLocalSearchParams();
+  const router = useRouter();
+  const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const [region, setRegion] = useState<Region | null>(null);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
+  const [micropoints, setMicropoints] = useState<LatLng[]>([]);
   const [loading, setLoading] = useState(true);
   const [heading, setHeading] = useState<number | null>(null);
   const [followUser, setFollowUser] = useState(true);
+  const [lastCheck, setLastCheck] = useState(Date.now());
+  const [arrivedAlertShown, setArrivedAlertShown] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -49,7 +112,10 @@ export default function MapScreen() {
           !geocodeData.features[0] ||
           !geocodeData.features[0].geometry
         ) {
-          throw new Error('Could not geocode destination address');
+          setDestination(null);
+          setRouteCoords([]);
+          setLoading(false);
+          return;
         }
         const [destLng, destLat] = geocodeData.features[0].geometry.coordinates;
         const dest: LatLng = { latitude: destLat, longitude: destLng };
@@ -66,8 +132,15 @@ export default function MapScreen() {
         const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${start.longitude},${start.latitude}&end=${destLng},${destLat}`;
         const routeRes = await fetch(routeUrl);
         const routeData = await routeRes.json();
-        if (!routeData.features || !routeData.features[0]) {
-          throw new Error('No route found');
+        if (
+          !routeData.features ||
+          !routeData.features[0] ||
+          !routeData.features[0].geometry ||
+          !routeData.features[0].geometry.coordinates
+        ) {
+          setRouteCoords([]);
+          setLoading(false);
+          return;
         }
         const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
           ([lng, lat]: [number, number]) => ({
@@ -114,6 +187,78 @@ export default function MapScreen() {
     };
   }, [address, followUser]);
 
+  useEffect(() => {
+    if (routeCoords.length > 1) {
+      setMicropoints(generateMicropoints(routeCoords));
+    }
+  }, [routeCoords]);
+
+  useEffect(() => {
+    if (!userLocation || (routeCoords.length < 2 && micropoints.length === 0)) return;
+
+    const interval = setInterval(() => {
+      setLastCheck(Date.now());
+      const allPoints = [...routeCoords, ...micropoints];
+      let minDist = Infinity;
+      for (const pt of allPoints) {
+        const dist = getDistance(userLocation, pt);
+        if (dist < minDist) minDist = dist;
+      }
+      // If user is further than 20m from any point, refresh route
+      if (minDist > 20) {
+        (async () => {
+          try {
+            if (!destination) return;
+            setLoading(true);
+            const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${userLocation.longitude},${userLocation.latitude}&end=${destination.longitude},${destination.latitude}`;
+            const routeRes = await fetch(routeUrl);
+            const routeData = await routeRes.json();
+            if (
+              !routeData.features ||
+              !routeData.features[0] ||
+              !routeData.features[0].geometry ||
+              !routeData.features[0].geometry.coordinates
+            ) {
+              setRouteCoords([]);
+              setLoading(false);
+              return;
+            }
+            const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
+              ([lng, lat]: [number, number]) => ({
+                latitude: lat,
+                longitude: lng,
+              })
+            );
+            setRouteCoords(coords);
+          } catch (error: any) {
+            // Optionally handle error silently
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [userLocation, routeCoords, micropoints, destination]);
+
+  useEffect(() => {
+    if (!userLocation || !destination) return;
+    // Check arrival on every location update
+    const distanceToTarget = getDistance(userLocation, destination);
+    if (distanceToTarget <= 10 && !arrivedAlertShown) {
+      setArrivedAlertShown(true);
+      Alert.alert(
+        "You have arrived",
+        "You are within 10 meters of your destination.",
+        [
+          { text: "Remain on map", onPress: () => setArrivedAlertShown(false), style: "cancel" },
+          { text: "Return to orders", onPress: () => router.replace("/") }
+        ]
+      );
+    }
+  }, [userLocation, destination, arrivedAlertShown, router]);
+
   if (loading || !region) {
     return (
       <View style={styles.loader}>
@@ -124,6 +269,11 @@ export default function MapScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Sidebar toggle button in top left */}
+      <TouchableOpacity style={styles.toggleButton} onPress={toggleSidebar}>
+        <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+      </TouchableOpacity>
+
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -147,8 +297,23 @@ export default function MapScreen() {
         {destination && (
           <Marker coordinate={destination} title="Destination" />
         )}
-        {routeCoords.length > 0 && (
-          <Polyline coordinates={routeCoords} strokeWidth={4} strokeColor="red" />
+        {routeCoords.length > 0 && userLocation && (
+          <>
+            {/* Already passed route: transparent */}
+            <Polyline
+              coordinates={routeCoords.slice(0, getClosestPointIndex(userLocation, routeCoords) + 1)}
+              strokeWidth={4}
+              strokeColor="rgba(255,0,0,0.2)"
+              zIndex={1}
+            />
+            {/* Remaining route: solid */}
+            <Polyline
+              coordinates={routeCoords.slice(getClosestPointIndex(userLocation, routeCoords))}
+              strokeWidth={4}
+              strokeColor="red"
+              zIndex={2}
+            />
+          </>
         )}
       </MapView>
       {!followUser && (
@@ -156,6 +321,8 @@ export default function MapScreen() {
           <Button title="Recenter" onPress={() => setFollowUser(true)} />
         </View>
       )}
+      {/* Sidebar */}
+      <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </View>
   );
 }
@@ -170,5 +337,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  toggleButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 20,
   },
 });

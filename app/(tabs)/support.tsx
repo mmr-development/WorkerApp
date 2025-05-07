@@ -305,7 +305,7 @@ export default function SupportScreen() {
             <View style={styles.contactButtonsContainer}>
               <TouchableOpacity 
                 style={[styles.contactButton, { backgroundColor: COLORS.primary }]}
-                onPress={navigateToChat}
+                onPress={() => router.push('/chat')}
               >
                 <Ionicons name="chatbubble-ellipses" size={22} color="white" />
                 <Text style={styles.contactButtonText}>Ask Support</Text>

@@ -36,6 +36,7 @@
     "expo-symbols": "~0.4.4",
     "expo-system-ui": "~5.0.7",
     "expo-web-browser": "~14.1.6",
+    "merge-options": "^3.0.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.2",

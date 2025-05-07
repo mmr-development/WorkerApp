@@ -8,6 +8,7 @@ import { useSidebar } from '@/hooks/useSidebar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OrderDetails } from './index';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
 
@@ -79,7 +80,7 @@ export default function HistoryScreen() {
         
         <TouchableOpacity 
           style={styles.chatButton}
-          onPress={() => Alert.alert("Chat", "Chat functionality coming soon!")}
+          onPress={() => router.push('/chat')}
         >
           <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
         </TouchableOpacity>
@@ -171,15 +172,12 @@ export default function HistoryScreen() {
             )}
           />
         )}
-        
-        {/* Order Detail Modal - remains the same */}
         <Modal
           animationType="slide"
           transparent={true}
           visible={isModalVisible}
           onRequestClose={() => setIsModalVisible(false)}
         >
-          {/* Modal content remains the same */}
         </Modal>
       </View>
 

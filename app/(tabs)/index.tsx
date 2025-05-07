@@ -43,13 +43,13 @@ export default function HomeScreen() {
     id: "#A1B2C3",
     restaurant: {
       name: "Burger Palace",
-      address: "Alfavej 502, Odense",
+      address: "Munkebjergvej 130, Odense",
       distance: 2.3,
       phoneNumber: "+45 12 34 56 78"
     },
-    client: {
+    client: { 
       name: "John Doe",
-      address: "456 Park Avenue, Odense",
+      address: "Alfavej 502, Odense",
       distance: 4.1,
       phoneNumber: "+45 87 65 43 21"
     },
@@ -187,11 +187,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.chatButton}
-            onPress={() => Alert.alert("Chat", "Chat functionality coming soon!")}
-          >
-            <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
+          style={styles.chatButton}
+          onPress={() => router.push('/chat')}
+        >
+          <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
           
           <View style={styles.centerContent}>
             <Ionicons name="time-outline" size={80} color={COLORS.primary} />
@@ -216,7 +216,7 @@ export default function HomeScreen() {
         {/* Add new chat icon button */}
         <TouchableOpacity 
           style={styles.chatButton}
-          onPress={() => Alert.alert("Chat", "Chat functionality coming soon!")}
+          onPress={() => router.push('/chat')}
         >
           <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
         </TouchableOpacity>
