@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
-import { COLORS } from '../../styles';
+import { styles, COLORS } from '../../styles';
 
 const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 
@@ -161,16 +161,12 @@ export default function MapScreen() {
           (loc) => {
             const { latitude, longitude, heading: newHeading, speed } = loc.coords;
             setUserLocation({ latitude, longitude });
-
-            // Only update heading if moving (speed > 0.5 m/s)
             setHeading((prevHeading) => {
               if (typeof speed === "number" && speed > 0.5 && typeof newHeading === "number" && !isNaN(newHeading)) {
                 return newHeading;
               }
               return prevHeading ?? 0;
             });
-
-            // Only recenter if followUser is true
             if (followUser) {
               mapRef.current?.animateCamera({
                 center: { latitude, longitude },
@@ -214,7 +210,6 @@ export default function MapScreen() {
         const dist = getDistance(userLocation, pt);
         if (dist < minDist) minDist = dist;
       }
-      // If user is further than 20m from any point, refresh route
       if (minDist > 20) {
         (async () => {
           try {
@@ -241,7 +236,6 @@ export default function MapScreen() {
             );
             setRouteCoords(coords);
           } catch (error: any) {
-            // Optionally handle error silently
           } finally {
             setLoading(false);
           }
@@ -272,7 +266,7 @@ export default function MapScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <TouchableOpacity style={styles.toggleButton} onPress={toggleSidebar}>
+      <TouchableOpacity style={styles.mapToggleButton} onPress={toggleSidebar}>
         <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
       </TouchableOpacity>
 
@@ -292,7 +286,7 @@ export default function MapScreen() {
             coordinate={userLocation}
             title="You"
             pinColor="blue"
-            rotation={followUser ? 180 : (heading ?? 0)} // Lock to 180 when following, else use heading
+            rotation={followUser ? 180 : (heading ?? 0)}
             anchor={{ x: 0.5, y: 0.5 }}
           />
         )}
@@ -334,18 +328,15 @@ export default function MapScreen() {
           />
         </View>
       )}
-      {/* Sidebar */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
-
-      {/* Arrived Modal */}
       <Modal
         visible={arrivedModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setArrivedModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.mapModalOverlay}>
+          <View style={styles.mapModalContent}>
             <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 12 }}>You have arrived</Text>
             <View style={{ flexDirection: 'row', marginTop: 16 }}>
               <Button
@@ -367,38 +358,3 @@ export default function MapScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  map: {
-    flex: 1,
-    width: Dimensions.get('window').width,
-    height: Dimensions.get('window').height,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  toggleButton: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    zIndex: 10,
-    padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    padding: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    minWidth: 250,
-  },
-});
