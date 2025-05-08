@@ -83,6 +83,10 @@ export default function MapScreen() {
   const [lastCheck, setLastCheck] = useState(Date.now());
   const [arrivedModalVisible, setArrivedModalVisible] = useState(false);
   const [hasArrived, setHasArrived] = useState(false);
+  const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'calculating' | 'success'>('idle');
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullStartY, setPullStartY] = useState(0);
+  const pullThreshold = 100; // Distance in pixels needed to trigger refresh
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -105,7 +109,7 @@ export default function MapScreen() {
         setHeading(location.coords.heading ?? 0);
 
         // Geocode destination address
-        const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address)}`;
+        const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address as string)}`;
         const geocodeRes = await fetch(geocodeUrl);
         const geocodeData = await geocodeRes.json();
         if (
@@ -210,41 +214,17 @@ export default function MapScreen() {
         const dist = getDistance(userLocation, pt);
         if (dist < minDist) minDist = dist;
       }
+      
+      // For debugging
+      console.log(`Min distance from route: ${minDist} meters`);
+      
       if (minDist > 20) {
-        (async () => {
-          try {
-            if (!destination) return;
-            setLoading(true);
-            const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${userLocation.longitude},${userLocation.latitude}&end=${destination.longitude},${destination.latitude}`;
-            const routeRes = await fetch(routeUrl);
-            const routeData = await routeRes.json();
-            if (
-              !routeData.features ||
-              !routeData.features[0] ||
-              !routeData.features[0].geometry ||
-              !routeData.features[0].geometry.coordinates
-            ) {
-              setRouteCoords([]);
-              setLoading(false);
-              return;
-            }
-            const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
-              ([lng, lat]: [number, number]) => ({
-                latitude: lat,
-                longitude: lng,
-              })
-            );
-            setRouteCoords(coords);
-          } catch (error: any) {
-          } finally {
-            setLoading(false);
-          }
-        })();
+        recalculateRoute();
       }
-    }, 5000);
+    }, 10000); // Changed from 5000 to 10000 ms (10 seconds)
 
     return () => clearInterval(interval);
-  }, [userLocation, routeCoords, micropoints, destination]);
+  }, [userLocation, destination]);
 
   useEffect(() => {
     if (!userLocation || !destination || hasArrived) return;
@@ -255,6 +235,50 @@ export default function MapScreen() {
       setHasArrived(true);
     }
   }, [userLocation, destination, hasArrived]);
+
+  const recalculateRoute = async () => {
+    try {
+      if (!userLocation || !destination) return;
+      
+      setRecalculationStatus('calculating');
+      
+      console.log("Recalculating route...");
+      const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${userLocation.longitude},${userLocation.latitude}&end=${destination.longitude},${destination.latitude}`;
+      const routeRes = await fetch(routeUrl);
+      const routeData = await routeRes.json();
+      
+      if (
+        !routeData.features ||
+        !routeData.features[0] ||
+        !routeData.features[0].geometry ||
+        !routeData.features[0].geometry.coordinates
+      ) {
+        console.error("Invalid route data returned:", routeData);
+        setRouteCoords([]);
+        setRecalculationStatus('idle');
+        return;
+      }
+      
+      const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
+        ([lng, lat]: [number, number]) => ({
+          latitude: lat,
+          longitude: lng,
+        })
+      );
+      
+      console.log(`New route calculated with ${coords.length} points`);
+      setRouteCoords(coords);
+      setRecalculationStatus('success');
+      setTimeout(() => {
+        setRecalculationStatus('idle');
+        setRefreshing(false);
+      }, 2000);
+    } catch (error: any) {
+      console.error("Route recalculation error:", error.message);
+      setRecalculationStatus('idle');
+      setRefreshing(false);
+    }
+  };
 
   if (loading || !region) {
     return (
@@ -269,6 +293,30 @@ export default function MapScreen() {
       <TouchableOpacity style={styles.mapToggleButton} onPress={toggleSidebar}>
         <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
       </TouchableOpacity>
+
+      {/* Dedicated pull-to-refresh zone */}
+      <View 
+        style={styles.pullRefreshZone}
+        onTouchStart={e => setPullStartY(e.nativeEvent.pageY)}
+        onTouchMove={e => {
+          if (refreshing) return;
+          const currentY = e.nativeEvent.pageY;
+          const pullDistance = currentY - pullStartY;
+          
+          if (pullDistance > 0 && pullDistance > pullThreshold) {
+            setRefreshing(true);
+            recalculateRoute();
+          }
+        }}
+      />
+
+      {/* Pull to refresh indicator */}
+      {refreshing && (
+        <View style={styles.pullRefreshIndicator}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={{ marginLeft: 8, color: COLORS.text }}>Refreshing route...</Text>
+        </View>
+      )}
 
       <MapView
         ref={mapRef}
@@ -310,6 +358,21 @@ export default function MapScreen() {
           </>
         )}
       </MapView>
+      
+      {/* Recalculation status indicator */}
+      {recalculationStatus !== 'idle' && (
+        <View style={styles.recalculationIndicator}>
+          {recalculationStatus === 'calculating' ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="checkmark-circle" size={24} color="green" />
+          )}
+          <Text style={{ marginLeft: 8, color: COLORS.text }}>
+            {recalculationStatus === 'calculating' ? 'Recalculating route...' : 'Route updated'}
+          </Text>
+        </View>
+      )}
+      
       {!followUser && (
         <View style={{ position: 'absolute', top: 40, right: 20 }}>
           <Button
