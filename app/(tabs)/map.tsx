@@ -86,12 +86,8 @@ export default function MapScreen() {
   const [hasArrived, setHasArrived] = useState(false);
   const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'calculating' | 'success'>('idle');
   const [refreshing, setRefreshing] = useState(false);
-  const [pullStartY, setPullStartY] = useState(0);
   const pullThreshold = 100; // Distance in pixels needed to trigger refresh
-  const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'calculating' | 'success'>('idle');
-  const [refreshing, setRefreshing] = useState(false);
   const [pullStartY, setPullStartY] = useState(0);
-  const pullThreshold = 100; // Distance in pixels needed to trigger refresh
   const mapRef = useRef<MapView>(null);
   const [closestPoint, setClosestPoint] = useState<LatLng | null>(null);
 
