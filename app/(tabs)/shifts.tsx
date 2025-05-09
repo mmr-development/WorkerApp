@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { styles, COLORS } from '../../styles';
+import { styles, colors } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
@@ -150,9 +150,7 @@ export default function ShiftsScreen() {
         }}
         style={[
           styles.calendarDayRow,
-          { 
-            backgroundColor: 'transparent'
-          }
+          styles.transparentBackground
         ]}
       >
         <Text style={styles.calendarDayText}>
@@ -163,18 +161,18 @@ export default function ShiftsScreen() {
             styles.calendarDayCircle,
             {
               backgroundColor: isToday
-                ? COLORS.primary
+                ? colors.primary
                 : isPendingVacation
-                  ? COLORS.warning // Yellow for pending vacation
+                  ? colors.warning // Yellow for pending vacation
                   : isVacationDay
                     ? '#4dabf7' // Blue for approved vacation
                     : hasShift
-                      ? COLORS.accent
-                      : COLORS.backgroundLight,
+                      ? colors.accent
+                      : colors.backgroundLight,
               borderWidth: isToday ? 2 : 0,
-              borderColor: isToday ? COLORS.accent : 'transparent',
+              borderColor: isToday ? colors.accent : 'transparent',
               elevation: isToday ? 2 : 0,
-              shadowColor: COLORS.primary,
+              shadowColor: colors.primary,
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: isToday ? 0.15 : 0,
               shadowRadius: 2,
@@ -184,10 +182,8 @@ export default function ShiftsScreen() {
           <Text
             style={[
               styles.calendarDayNumber,
-              { 
-                color: isToday || isVacationDay ? COLORS.white : COLORS.text,
-                fontWeight: (hasShift || isVacationDay) ? 'bold' : 'normal',
-              }
+              isToday || isVacationDay ? styles.whiteText : styles.normalText,
+              (hasShift || isVacationDay) && { fontWeight: 'bold' },
             ]}
           >
             {date.date()}
@@ -200,13 +196,13 @@ export default function ShiftsScreen() {
                 <Ionicons
                   name="briefcase"
                   size={20}
-                  color={COLORS.warning || '#FFA500'}
-                  style={{ marginRight: 6 }}
+                  color={colors.warning || '#FFA500'}
+                  style={styles.iconRightMargin}
                 />
                 <Text
                   style={[
                     styles.calendarShiftTime,
-                    { color: COLORS.warning || '#FFA500' }
+                    styles.warningText
                   ]}
                 >
                   {shift.start} - {shift.end}
@@ -214,7 +210,7 @@ export default function ShiftsScreen() {
                 <Text
                   style={[
                     styles.calendarShiftDuration,
-                    { color: COLORS.warning || '#FFA500' }
+                    styles.warningText
                   ]}
                 >
                   ({shiftDuration})
@@ -225,13 +221,13 @@ export default function ShiftsScreen() {
                 <Ionicons
                   name="briefcase"
                   size={20}
-                  color={isToday ? COLORS.white : COLORS.primary}
-                  style={{ marginRight: 6 }}
+                  color={isToday ? colors.white : colors.primary}
+                  style={styles.iconRightMargin}
                 />
                 <Text
                   style={[
                     styles.calendarShiftTime,
-                    { color: COLORS.text }
+                    styles.normalText
                   ]}
                 >
                   {shift.start} - {shift.end}
@@ -239,7 +235,7 @@ export default function ShiftsScreen() {
                 <Text
                   style={[
                     styles.calendarShiftDuration,
-                    { color: COLORS.grey }
+                    styles.greyText
                   ]}
                 >
                   ({shiftDuration})
@@ -253,16 +249,16 @@ export default function ShiftsScreen() {
             <Ionicons
               name="airplane"
               size={20}
-              color={isPendingVacation ? COLORS.warning : "#4dabf7"}
-              style={{ marginRight: 6 }}
+              color={isPendingVacation ? colors.warning : colors.vacationApproved}
+              style={styles.iconRightMargin}
             />
             <Text
               style={[
                 styles.calendarShiftTime,
-                { color: isPendingVacation ? COLORS.warning : "#4dabf7" }
+                { color: isPendingVacation ? colors.warning : colors.vacationApproved }
               ]}
             >
-              {isPendingVacation ? "Vacation" : "Vacation"}
+              {isPendingVacation ? "Vacation (Pending)" : "Vacation"}
             </Text>
           </View>
         )}
@@ -282,40 +278,40 @@ export default function ShiftsScreen() {
           style={styles.toggleButton}
           onPress={toggleSidebar}
         >
-          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={styles.vacationButton || styles.chatButton} // Use chatButton style if vacationButton isn't defined
+          style={styles.vacationButton || styles.chatButton}
           onPress={() => setVacationModalVisible(true)}
         >
-          <Ionicons name="airplane" size={26} color={COLORS.primary} />
+          <Ionicons name="airplane" size={26} color={colors.primary} />
         </TouchableOpacity>
         
         <Text style={styles.welcomeText}>Shifts</Text>
 
         <View style={styles.calendarContainer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={styles.weekNavContainer}>
             <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)}>
-              <Ionicons name="chevron-back" size={28} color={COLORS.text} />
+              <Ionicons name="chevron-back" size={28} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.calendarDateText}>
               {startOfWeek.format('MMMM YYYY')}
             </Text>
             <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)}>
-              <Ionicons name="chevron-forward" size={28} color={COLORS.text} />
+              <Ionicons name="chevron-forward" size={28} color={colors.text} />
             </TouchableOpacity>
           </View>
-          <View style={[styles.calendar, { paddingVertical: 10, paddingHorizontal: 0 }]}>
+          <View style={[styles.calendar, styles.calendarPadding]}>
             {weekDaysVertical}
           </View>
           <View style={styles.calendarLegend}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendColorBox, { backgroundColor: COLORS.primary }]} />
+              <View style={[styles.legendColorBox, { backgroundColor: colors.primary }]} />
               <Text style={styles.legendText}>Shift</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendColorBox, { backgroundColor: COLORS.warning }]} />
+              <View style={[styles.legendColorBox, { backgroundColor: colors.warning }]} />
               <Text style={styles.legendText}>Pending</Text>
             </View>
             <View style={styles.legendItem}>
@@ -349,7 +345,7 @@ export default function ShiftsScreen() {
             </Text>
             {step === 'start' && (
               <>
-                <Text style={{ marginBottom: 6 }}>Select start hour:</Text>
+                <Text style={styles.formLabel}>Select start hour:</Text>
                 <Picker
                   selectedValue={requestStart}
                   style={styles.pickerContainer}
@@ -377,7 +373,7 @@ export default function ShiftsScreen() {
             )}
             {step === 'end' && (
               <>
-                <Text style={{ marginBottom: 6 }}>Select end hour:</Text>
+                <Text style={styles.formLabel}>Select end hour:</Text>
                 <Picker
                   selectedValue={requestEnd || hourOptions[0]}
                   style={styles.pickerContainer}
@@ -402,7 +398,7 @@ export default function ShiftsScreen() {
                   <TouchableOpacity
                     style={[
                       styles.primaryButton, 
-                      { opacity: shiftDuration ? 1 : 0.5 }
+                      shiftDuration ? styles.activeButton : styles.inactiveButton
                     ]}
                     disabled={!shiftDuration}
                     onPress={() => {
@@ -456,13 +452,12 @@ export default function ShiftsScreen() {
             
             {vacationStep === 'start' && (
               <>
-                <Text style={{ marginBottom: 6 }}>Start day:</Text>
+                <Text style={styles.formLabel}>Start day:</Text>
                 <Picker
                   selectedValue={vacationStart}
                   style={styles.pickerContainer}
                   onValueChange={(value) => {
                     setVacationStart(value);
-                    // Always reset conflict when changing dates
                     setVacationConflict(null);
                   }}
                 >
@@ -507,10 +502,10 @@ export default function ShiftsScreen() {
             
             {vacationStep === 'end' && (
               <>
-                <Text style={{ marginBottom: 6, fontWeight: 'bold' }}>
+                <Text style={styles.boldFormLabel}>
                   Start day: {dayjs(vacationStart).format('DD/MM/YYYY')}
                 </Text>
-                <Text style={{ marginBottom: 6, marginTop: 8 }}>End day:</Text>
+                <Text style={styles.spacedFormLabel}>End day:</Text>
                 <Picker
                   selectedValue={vacationEnd}
                   style={styles.pickerContainer}
@@ -522,7 +517,6 @@ export default function ShiftsScreen() {
                     const end = dayjs(value);
                     setVacationConflict(null);
                     
-                    // Find any scheduled shifts in this period
                     for (const shift of upcomingShifts) {
                       if (shift.status !== 'Scheduled') continue;
                       
@@ -536,19 +530,18 @@ export default function ShiftsScreen() {
                   }}
                 >
                   {Array.from({ length: 30 }, (_, i) => {
-                    // Start from the day after vacation start
                     const minDay = dayjs(vacationStart).add(1, 'day').diff(dayjs(), 'day');
                     const date = dayjs().add(i + minDay, 'day').format('YYYY-MM-DD');
                     return <Picker.Item key={date} label={dayjs(date).format('DD/MM/YYYY')} value={date} />;
                   })}
                 </Picker>
                 
-                <Text style={{ marginTop: 10, fontWeight: 'bold' }}>
+                <Text style={styles.durationText}>
                   Vacation duration: {vacationDuration} {vacationDuration === 1 ? 'day' : 'days'}
                 </Text>
                 
                 {vacationConflict && (
-                  <Text style={{ marginTop: 10, color: COLORS.error, textAlign: 'center' }}>
+                  <Text style={styles.errorText}>
                     You have a scheduled shift on {vacationConflict}.
                   </Text>
                 )}
@@ -557,18 +550,17 @@ export default function ShiftsScreen() {
                   <TouchableOpacity
                     style={[
                       styles.primaryButton,
-                      { opacity: vacationConflict ? 0.5 : 1 }
+                      vacationConflict ? styles.inactiveButton : styles.activeButton
                     ]}
                     disabled={!!vacationConflict}
                     onPress={() => {
-                      // Add the vacation to the vacations array
                       setVacations([
                         ...vacations,
                         {
                           id: (vacations.length + 1).toString(),
                           start: vacationStart,
                           end: vacationEnd,
-                          status: 'Pending' // Initial status is Pending
+                          status: 'Pending' // init status pending
                         }
                       ]);
                       

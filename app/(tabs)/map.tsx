@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
-import { styles, COLORS } from '../../styles';
+import { styles, colors } from '../../styles';
 
 const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 
@@ -74,6 +74,7 @@ export default function MapScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const [region, setRegion] = useState<Region | null>(null);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [oldUserLocation, setOldUserLocation] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [micropoints, setMicropoints] = useState<LatLng[]>([]);
@@ -83,7 +84,12 @@ export default function MapScreen() {
   const [lastCheck, setLastCheck] = useState(Date.now());
   const [arrivedModalVisible, setArrivedModalVisible] = useState(false);
   const [hasArrived, setHasArrived] = useState(false);
+  const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'calculating' | 'success'>('idle');
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullStartY, setPullStartY] = useState(0);
+  const pullThreshold = 100; // Distance in pixels needed to trigger refresh
   const mapRef = useRef<MapView>(null);
+  const [closestPoint, setClosestPoint] = useState<LatLng | null>(null);
 
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
@@ -105,7 +111,7 @@ export default function MapScreen() {
         setHeading(location.coords.heading ?? 0);
 
         // Geocode destination address
-        const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address)}`;
+        const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address as string)}`;
         const geocodeRes = await fetch(geocodeUrl);
         const geocodeData = await geocodeRes.json();
         if (
@@ -204,57 +210,107 @@ export default function MapScreen() {
 
     const interval = setInterval(() => {
       setLastCheck(Date.now());
-      const allPoints = [...routeCoords, ...micropoints];
-      let minDist = Infinity;
-      for (const pt of allPoints) {
+
+      // Calculate min distance to routeCoords
+      let minDistCoords = Infinity;
+      let closestCoord: LatLng | null = null;
+      for (const pt of routeCoords) {
         const dist = getDistance(userLocation, pt);
-        if (dist < minDist) minDist = dist;
+        if (dist < minDistCoords) {
+          minDistCoords = dist;
+          closestCoord = pt;
+        }
       }
-      if (minDist > 20) {
-        (async () => {
-          try {
-            if (!destination) return;
-            setLoading(true);
-            const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${userLocation.longitude},${userLocation.latitude}&end=${destination.longitude},${destination.latitude}`;
-            const routeRes = await fetch(routeUrl);
-            const routeData = await routeRes.json();
-            if (
-              !routeData.features ||
-              !routeData.features[0] ||
-              !routeData.features[0].geometry ||
-              !routeData.features[0].geometry.coordinates
-            ) {
-              setRouteCoords([]);
-              setLoading(false);
-              return;
-            }
-            const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
-              ([lng, lat]: [number, number]) => ({
-                latitude: lat,
-                longitude: lng,
-              })
-            );
-            setRouteCoords(coords);
-          } catch (error: any) {
-          } finally {
-            setLoading(false);
-          }
-        })();
+
+      // Calculate min distance to micropoints
+      let minDistMicropoints = Infinity;
+      let closestMicro: LatLng | null = null;
+      for (const pt of micropoints) {
+        const dist = getDistance(userLocation, pt);
+        if (dist < minDistMicropoints) {
+          minDistMicropoints = dist;
+          closestMicro = pt;
+        }
       }
-    }, 5000);
+
+      let minDist = minDistCoords;
+      let closest = closestCoord;
+      if (minDistMicropoints < minDistCoords) {
+        minDist = minDistMicropoints;
+        closest = closestMicro;
+      }
+      setClosestPoint(closest);
+      console.log(
+        `Distance to nearest coordinate: ${minDistCoords.toFixed(2)} meters, ` +
+        `to nearest micropoint: ${minDistMicropoints.toFixed(2)} meters, ` +
+        `closest: ${minDist.toFixed(2)} meters`
+      );
+
+      if (minDist > 10) {
+        if (oldUserLocation && getDistance(oldUserLocation, userLocation) > 10) {
+          recalculateRoute();
+          setOldUserLocation(userLocation);
+        } else if (!oldUserLocation) {
+          setOldUserLocation(userLocation);
+        }
+
+      }
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, [userLocation, routeCoords, micropoints, destination]);
+  }, [userLocation, destination, routeCoords, micropoints]);
 
   useEffect(() => {
     if (!userLocation || !destination || hasArrived) return;
-    // Check arrival on every location update
     const distanceToTarget = getDistance(userLocation, destination);
     if (distanceToTarget <= 10) {
       setArrivedModalVisible(true);
       setHasArrived(true);
     }
   }, [userLocation, destination, hasArrived]);
+
+  const recalculateRoute = async () => {
+
+    try {
+      if (!userLocation || !destination) return;
+      
+      setRecalculationStatus('calculating');
+      const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${userLocation.longitude},${userLocation.latitude}&end=${destination.longitude},${destination.latitude}`;
+      const routeRes = await fetch(routeUrl);
+      const routeData = await routeRes.json();
+      
+      if (
+        !routeData.features ||
+        !routeData.features[0] ||
+        !routeData.features[0].geometry ||
+        !routeData.features[0].geometry.coordinates
+      ) {
+        console.error("Invalid route data returned:", routeData);
+        setRouteCoords([]);
+        setRecalculationStatus('idle');
+        return;
+      }
+      
+      const coords: LatLng[] = routeData.features[0].geometry.coordinates.map(
+        ([lng, lat]: [number, number]) => ({
+          latitude: lat,
+          longitude: lng,
+        })
+      );
+      
+      console.log(`New route calculated with ${coords.length} points`);
+      setRouteCoords(coords);
+      setRecalculationStatus('success');
+      setTimeout(() => {
+        setRecalculationStatus('idle');
+        setRefreshing(false);
+      }, 2000);
+    } catch (error: any) {
+      console.error("Route recalculation error:", error.message);
+      setRecalculationStatus('idle');
+      setRefreshing(false);
+    }
+  };
 
   if (loading || !region) {
     return (
@@ -267,8 +323,32 @@ export default function MapScreen() {
   return (
     <View style={{ flex: 1 }}>
       <TouchableOpacity style={styles.mapToggleButton} onPress={toggleSidebar}>
-        <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+        <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
       </TouchableOpacity>
+
+      {/* Dedicated pull-to-refresh zone */}
+      <View 
+        style={styles.pullRefreshZone}
+        onTouchStart={e => setPullStartY(e.nativeEvent.pageY)}
+        onTouchMove={e => {
+          if (refreshing) return;
+          const currentY = e.nativeEvent.pageY;
+          const pullDistance = currentY - pullStartY;
+          
+          if (pullDistance > 0 && pullDistance > pullThreshold) {
+            setRefreshing(true);
+            recalculateRoute();
+          }
+        }}
+      />
+
+      {/* Pull to refresh indicator */}
+      {refreshing && (
+        <View style={styles.pullRefreshIndicator}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{ marginLeft: 8, color: colors.text }}>Refreshing route...</Text>
+        </View>
+      )}
 
       <MapView
         ref={mapRef}
@@ -309,7 +389,31 @@ export default function MapScreen() {
             />
           </>
         )}
+        {/* Closest point marker */}
+        {closestPoint && (
+          <Marker
+            coordinate={closestPoint}
+            title="Closest Point"
+            pinColor="orange"
+            description="This is the closest route coordinate or micropoint"
+          />
+        )}
       </MapView>
+      
+      {/* Recalculation status indicator */}
+      {recalculationStatus !== 'idle' && (
+        <View style={styles.recalculationIndicator}>
+          {recalculationStatus === 'calculating' ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons name="checkmark-circle" size={24} color="green" />
+          )}
+          <Text style={{ marginLeft: 8, color: colors.text }}>
+            {recalculationStatus === 'calculating' ? 'Recalculating route...' : 'Route updated'}
+          </Text>
+        </View>
+      )}
+      
       {!followUser && (
         <View style={{ position: 'absolute', top: 40, right: 20 }}>
           <Button

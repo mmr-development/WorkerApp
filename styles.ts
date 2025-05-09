@@ -1,7 +1,7 @@
 import { Dimensions, StyleSheet } from 'react-native';
 
 // Theme colors based on brand guidelines
-export const COLORS = {
+export const colors = {
   primary: '#2cb673',          // vibrant green for primary elements
   accent: '#b1e2c6',           // lighter green for accents
   background: '#ebf8f1',       // soft greenish-white for background
@@ -18,7 +18,8 @@ export const COLORS = {
   lightGrey: '#e0e0e0',
   error: '#e53935',            // Red for error states and logout
   overlay: 'rgba(0,0,0,0.5)',
-  warning: '#FFA500' // Added warning color
+  warning: '#FFA500', // Added warning color
+  vacationApproved: '#4dabf7',
 };
 
 export const styles = StyleSheet.create({
@@ -26,19 +27,19 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
     position: 'relative',
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   mainContent: {
     flex: 1,
     padding: 20,
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   welcomeText: {
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   toggleButton: {
     position: 'absolute',
@@ -55,7 +56,7 @@ export const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.overlay,
+    backgroundColor: colors.overlay,
     zIndex: 10,
   },
   sidebar: {
@@ -64,9 +65,9 @@ export const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     width: '70%',
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: colors.backgroundLight,
     zIndex: 20,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -75,13 +76,13 @@ export const styles = StyleSheet.create({
   sidebarHeader: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.primary,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.primary,
   },
   sidebarTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.white,
+    color: colors.white,
   },
   sidebarLinks: {
     flex: 1,
@@ -91,19 +92,19 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   sidebarLinkText: {
     fontSize: 16,
     marginLeft: 10,
-    color: COLORS.text,
+    color: colors.text,
   },
   
   // Orders styles (used in index.tsx)
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 20,
     marginBottom: 10,
     alignSelf: 'flex-start',
@@ -117,11 +118,11 @@ export const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   orderCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -132,13 +133,13 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.accent,
+    borderBottomColor: colors.accent,
     marginBottom: 12,
   },
   orderCardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginLeft: 10,
   },
   orderDetailItem: {
@@ -149,16 +150,16 @@ export const styles = StyleSheet.create({
   orderDetailLabel: {
     width: '30%',
     fontSize: 15,
-    color: COLORS.grey,
+    color: colors.grey,
     fontWeight: '500',
   },
   orderDetailValue: {
     fontSize: 15,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   actionButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -167,7 +168,7 @@ export const styles = StyleSheet.create({
     marginTop: 10,
   },
   actionButtonText: {
-    color: COLORS.white,
+    color: colors.white,
     fontWeight: 'bold',
     marginLeft: 8,
   },
@@ -176,12 +177,12 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.accent,
+    borderBottomColor: colors.accent,
   },
   orderItemText: {
     marginLeft: 10,
     fontSize: 16,
-    color: COLORS.text,
+    color: colors.text,
   },
   
   // Settings styles
@@ -196,11 +197,11 @@ export const styles = StyleSheet.create({
   settingItem: {
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.white,
     margin: 10,
     borderRadius: 8,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -212,7 +213,7 @@ export const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     marginLeft: 10,
-    color: COLORS.text,
+    color: colors.text,
   },
   settingTextContainer: {
     flexDirection: 'row',
@@ -221,11 +222,11 @@ export const styles = StyleSheet.create({
   
   // User profile section in settings
   userInfoContainer: {
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     padding: 20,
     margin: 10,
     borderRadius: 8,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -240,30 +241,30 @@ export const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 5,
   },
   userDetail: {
     fontSize: 14,
-    color: COLORS.grey,
+    color: colors.grey,
     marginBottom: 3,
   },
   loginButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     padding: 15,
     margin: 10,
     borderRadius: 8,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
   },
   loginButtonText: {
-    color: COLORS.white,
+    color: colors.white,
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 10,
@@ -272,21 +273,21 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     alignSelf: 'flex-start',
   },
   statusText: {
-    color: COLORS.white,
+    color: colors.white,
     fontSize: 14,
     fontWeight: 'bold',
   },
 
   phoneLink: {
-    color: COLORS.primary,
+    color: colors.primary,
     textDecorationLine: 'underline',
   },
   disabledButton: {
-    backgroundColor: COLORS.grey,
+    backgroundColor: colors.grey,
     opacity: 0.7,
   },
   emptyStateContainer: {
@@ -299,12 +300,12 @@ export const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 20,
   },
   emptyStateSubtext: {
     fontSize: 16,
-    color: COLORS.grey,
+    color: colors.grey,
     marginTop: 10,
     textAlign: 'center',
   },
@@ -330,10 +331,10 @@ export const styles = StyleSheet.create({
   mapContainer: {
     flex: 1,
     width: '100%',
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     borderRadius: 10,
     padding: 16,
-    shadowColor: COLORS.black,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -343,26 +344,26 @@ export const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 8,
     padding: 20,
     marginBottom: 16,
   },
   mapPlaceholder: {
     textAlign: 'center',
-    color: COLORS.grey,
+    color: colors.grey,
     marginTop: 20,
     padding: 10,
   },
   mapDestinationLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 16,
   },
   mapDestinationText: {
     fontSize: 18,
-    color: COLORS.primary,
+    color: colors.primary,
     marginTop: 8,
     marginBottom: 16,
     textAlign: 'center',
@@ -375,7 +376,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     padding: 24,
     borderRadius: 12,
     width: 320,
@@ -388,7 +389,7 @@ export const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 16,
-    color: COLORS.grey,
+    color: colors.grey,
     marginBottom: 12,
   },
   pickerContainer: {
@@ -404,33 +405,33 @@ export const styles = StyleSheet.create({
     marginTop: 18,
   },
   primaryButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 8,
     marginRight: 10,
   },
   secondaryButton: {
-    backgroundColor: COLORS.grey,
+    backgroundColor: colors.grey,
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 8,
   },
   buttonText: {
-    color: COLORS.white,
+    color: colors.white,
     fontWeight: 'bold',
   },
 
   orderDetailSection: {
     marginBottom: 20,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: colors.backgroundLight,
     borderRadius: 8,
     padding: 15,
   },
   sectionTitle1: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.primary,
+    color: colors.primary,
     marginBottom: 10,
   },
   tipContainer: {
@@ -440,7 +441,7 @@ export const styles = StyleSheet.create({
   tipAmount: {
     marginLeft: 8,
     fontSize: 15,
-    color: COLORS.primary,
+    color: colors.primary,
     fontWeight: 'bold',
   },
 
@@ -453,11 +454,11 @@ export const styles = StyleSheet.create({
   awaitingOrderText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 20,
   },
   historyOrderCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     borderRadius: 10,
     padding: 20,
     marginBottom: 20,
@@ -465,7 +466,7 @@ export const styles = StyleSheet.create({
     width: '94%',
     alignSelf: 'center',
     borderWidth: 1,
-    borderColor: COLORS.lightGrey,
+    borderColor: colors.lightGrey,
     elevation: 0,
   },
   
@@ -480,14 +481,14 @@ export const styles = StyleSheet.create({
   historyDetailLabel: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginRight: 10,
     minWidth: 90,
   },
   
   historyDetailValue: {
     fontSize: 15,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
 
@@ -495,7 +496,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.backgroundLight,
+    borderTopColor: colors.backgroundLight,
     paddingTop: 16,
   },
 
@@ -513,25 +514,25 @@ export const styles = StyleSheet.create({
   noPhotoContainer: {
     alignItems: 'center',
     padding: 20,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: colors.backgroundLight,
     borderRadius: 8,
     marginTop: 10,
   },
   noPhotoText: {
-    color: COLORS.error,
+    color: colors.error,
     textAlign: 'center',
     marginTop: 10,
     fontSize: 15,
   },
 
   faqItem: {
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     borderRadius: 8,
     marginBottom: 15,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.black,
+    borderColor: colors.border,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -546,18 +547,18 @@ export const styles = StyleSheet.create({
   faqQuestionText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   faqAnswer: {
     padding: 15,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: colors.backgroundLight,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
   faqAnswerText: {
     fontSize: 15,
-    color: COLORS.text,
+    color: colors.text,
     lineHeight: 22,
   },
   bulletPoint: {
@@ -568,27 +569,27 @@ export const styles = StyleSheet.create({
   },
   bulletText: {
     fontSize: 15,
-    color: COLORS.text,
+    color: colors.text,
     marginLeft: 8,
     flex: 1,
   },
   stepTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.primary,
+    color: colors.primary,
     marginTop: 12,
     marginBottom: 4,
   },
   contactSection: {
     marginTop: 30,
     marginBottom: 40,
-    backgroundColor: COLORS.white,
+    backgroundColor: colors.white,
     padding: 20,
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.black,
+    borderColor: colors.border,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -597,17 +598,17 @@ export const styles = StyleSheet.create({
   contactTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 8,
   },
   contactText: {
     fontSize: 14,
-    color: COLORS.grey,
+    color: colors.grey,
     textAlign: 'center',
     marginBottom: 20,
   },
   phoneButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -617,7 +618,7 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   phoneButtonText: {
-    color: COLORS.white,
+    color: colors.white,
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
@@ -662,18 +663,18 @@ calendar: {
   marginBottom: 20,
   borderRadius: 10,
   borderWidth: 1,
-  borderColor: COLORS.border,
-  backgroundColor: COLORS.white,
+  borderColor: colors.border,
+  backgroundColor: colors.white,
 },
 calendarLegend: {
   flexDirection: 'row',
   justifyContent: 'space-around',
   paddingVertical: 10,
   marginBottom: 10,
-  backgroundColor: COLORS.white,
+  backgroundColor: colors.white,
   borderRadius: 8,
   borderWidth: 1,
-  borderColor: COLORS.border,
+  borderColor: colors.border,
 },
 legendItem: {
   flexDirection: 'row',
@@ -687,7 +688,7 @@ legendColorBox: {
 },
 legendText: {
   fontSize: 14,
-  color: COLORS.text,
+  color: colors.text,
 },
 vacationButton: {
   position: 'absolute',
@@ -701,19 +702,19 @@ shiftInputContainer: {
 },
 shiftInputLabel: {
   fontSize: 16,
-  color: COLORS.text,
+  color: colors.text,
   marginBottom: 8,
 },
 shiftTimeInput: {
   borderWidth: 1,
-  borderColor: COLORS.border,
+  borderColor: colors.border,
   borderRadius: 8,
   padding: 12,
   fontSize: 16,
-  backgroundColor: COLORS.white,
+  backgroundColor: colors.white,
 },
 shiftSubmitButton: {
-  backgroundColor: COLORS.primary,
+  backgroundColor: colors.primary,
   paddingVertical: 12,
   paddingHorizontal: 20,
   borderRadius: 8,
@@ -721,29 +722,29 @@ shiftSubmitButton: {
   marginTop: 16,
 },
 shiftSubmitButtonText: {
-  color: COLORS.white,
+  color: colors.white,
   fontSize: 16,
   fontWeight: 'bold',
 },
 calendarDateText: {
   fontSize: 18,
   fontWeight: 'bold',
-  color: COLORS.primary,
+  color: colors.primary,
   marginBottom: 16,
   textAlign: 'center',
 },
 upcomingShiftsContainer: {
-  backgroundColor: COLORS.white,
+  backgroundColor: colors.white,
   borderRadius: 10,
   padding: 16,
   marginBottom: 20,
   borderWidth: 1,
-  borderColor: COLORS.border,
+  borderColor: colors.border,
 },
 upcomingShiftsTitle: {
   fontSize: 18,
   fontWeight: 'bold',
-  color: COLORS.text,
+  color: colors.text,
   marginBottom: 16,
 },
 upcomingShiftItem: {
@@ -751,7 +752,7 @@ upcomingShiftItem: {
   alignItems: 'center',
   paddingVertical: 12,
   borderBottomWidth: 1,
-  borderBottomColor: COLORS.border,
+  borderBottomColor: colors.border,
 },
 upcomingShiftDetails: {
   flex: 1,
@@ -760,11 +761,11 @@ upcomingShiftDetails: {
 upcomingShiftDate: {
   fontSize: 16,
   fontWeight: 'bold',
-  color: COLORS.text,
+  color: colors.text,
 },
 upcomingShiftTime: {
   fontSize: 14,
-  color: COLORS.grey,
+  color: colors.grey,
   marginTop: 4,
 },
 upcomingShiftStatus: {
@@ -774,7 +775,7 @@ upcomingShiftStatus: {
 },
 noShiftsText: {
   fontSize: 16,
-  color: COLORS.grey,
+  color: colors.grey,
   textAlign: 'center',
   paddingVertical: 16,
   fontStyle: 'italic',
@@ -791,7 +792,7 @@ calendarDayRow: {
 },
 calendarDayText: {
   width: 48,
-  color: COLORS.grey,
+  color: colors.grey,
   fontWeight: 'bold',
   fontSize: 16,
   textAlign: 'right',
@@ -823,12 +824,12 @@ calendarShiftDuration: {
   fontWeight: 'bold',
 },
 modalContent: {
-  backgroundColor: COLORS.white,
+  backgroundColor: colors.white,
   borderRadius: 10,
   padding: 20,
   width: '90%',
   maxHeight: '80%',
-  shadowColor: COLORS.black,
+  shadowColor: colors.black,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.25,
   shadowRadius: 3.84,
@@ -860,7 +861,7 @@ mapButtonContainer: {
   flexDirection: 'row',
   justifyContent: 'space-between',
   marginBottom: 10,
-  backgroundColor: COLORS.backgroundLight,
+  backgroundColor: colors.backgroundLight,
   borderRadius: 8,
   padding: 4,
 },
@@ -874,12 +875,12 @@ mapButton: {
   marginHorizontal: 2,
 },
 mapButtonActive: {
-  backgroundColor: COLORS.primary,
+  backgroundColor: colors.primary,
 },
 mapButtonText: {
   marginLeft: 4,
   fontSize: 12,
-  color: COLORS.text,
+  color: colors.text,
 },
 mapButtonTextActive: {
   color: 'white',
@@ -892,14 +893,14 @@ mapButtonTextActive: {
     paddingTop: 40,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     marginBottom: 0,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: colors.text,
     textAlign: 'center',
     flex: 1,
   },
@@ -921,12 +922,12 @@ mapButtonTextActive: {
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGrey,
-    backgroundColor: COLORS.white,
+    borderBottomColor: colors.lightGrey,
+    backgroundColor: colors.white,
   },
   chatRoomText: {
     fontSize: 18,
-    color: COLORS.text,
+    color: colors.text,
   },
   chatHeaderRow: {
     flexDirection: 'row',
@@ -936,8 +937,8 @@ mapButtonTextActive: {
     paddingBottom: 12,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
     minHeight: 64,
   },
   chatHeaderTitle: {
@@ -945,7 +946,7 @@ mapButtonTextActive: {
     textAlign: 'center',
     fontSize: 22,
     fontWeight: 'bold',
-    color: COLORS.primary, // green!
+    color: colors.primary, // green!
   },
   map: {
     flex: 1,
@@ -978,5 +979,218 @@ mapButtonTextActive: {
     borderRadius: 12,
     alignItems: 'center',
     minWidth: 250,
+  },
+  chatMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  chatMessageSender: {
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginRight: 8,
+    fontSize: 15,
+    minWidth: 48,
+  },
+  chatMessageText: {
+    color: colors.text,
+    fontSize: 15,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  chatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.lightGrey,
+  },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 16,
+    backgroundColor: colors.backgroundLight,
+    marginRight: 8,
+  },
+
+  // Calendar week navigation
+  weekNavContainer: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+  },
+
+  // Calendar styles
+  calendarPadding: {
+    paddingVertical: 10, 
+    paddingHorizontal: 0,
+  },
+  transparentBackground: {
+    backgroundColor: 'transparent',
+  },
+  
+  // Icon styles
+  iconRightMargin: {
+    marginRight: 6,
+  },
+
+  // Text styles
+  warningText: {
+    color: colors.warning,
+  },
+  greyText: {
+    color: colors.grey,
+  },
+  normalText: {
+    color: colors.text,
+  },
+  whiteText: {
+    color: colors.white,
+  },
+  
+  // Form label styles
+  formLabel: {
+    marginBottom: 6,
+  },
+  boldFormLabel: {
+    marginBottom: 6, 
+    fontWeight: 'bold',
+  },
+  spacedFormLabel: {
+    marginBottom: 6, 
+    marginTop: 8,
+  },
+  durationText: {
+    marginTop: 10, 
+    fontWeight: 'bold',
+  },
+  errorText: {
+    marginTop: 10, 
+    color: colors.error, 
+    textAlign: 'center',
+  },
+
+  // Button states
+  activeButton: {
+    opacity: 1,
+  },
+  inactiveButton: {
+    opacity: 0.5,
+  },
+  routeLoadingIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+
+  loadingText: {
+    marginLeft: 8,
+    color: colors.text,
+    fontSize: 14,
+  },
+  startNavigationContainer: {
+    position: 'absolute',
+    bottom: 30,
+    alignSelf: 'center',
+    zIndex: 10,
+  },
+  startNavigationButton: {
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  startNavigationText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  input: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    width: '100%',
+  },
+  recalculationIndicator: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  pullRefreshIndicator: {
+  position: 'absolute',
+  top: 20,
+  left: 0,
+  right: 0,
+  flexDirection: 'row',
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+  padding: 8,
+  borderRadius: 20,
+  zIndex: 10,
+  marginHorizontal: 40,
+},
+  pullRefreshZone: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 60,
+  zIndex: 5,
+  },
+  pullRefreshText: {
+    color: colors.text,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  pullRefreshArrow: {
+    marginTop: 2,
   },
 });

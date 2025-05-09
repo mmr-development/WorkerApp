@@ -1,26 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Text, ScrollView, TouchableOpacity, View, Linking, Alert } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
-import { styles, COLORS } from '../../styles';
+import { styles, colors } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 export type OrderDetails = {
   id: string;
   restaurant: {
     name: string;
     address: string;
-    distance: number;
     phoneNumber: string;
   };
   client: {
     name: string;
     address: string;
-    distance: number;
     phoneNumber: string;
   };
   items: string[];
@@ -36,6 +35,9 @@ export type OrderDetails = {
 // Add storage key for history
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
 
+// Add a geocoding cache object outside component
+const geocodeCache: Record<string, { latitude: number; longitude: number }> = {};
+
 export default function HomeScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const router = useRouter();
@@ -43,20 +45,129 @@ export default function HomeScreen() {
     id: "#A1B2C3",
     restaurant: {
       name: "Burger Palace",
-      address: "Munkebjergvej 130, Odense",
-      distance: 2.3,
+      address: "Ørbækvej 75, Odense",
       phoneNumber: "+45 12 34 56 78"
     },
     client: { 
       name: "John Doe",
-      address: "Alfavej 502, Odense",
-      distance: 4.1,
+      address: "Munkebjergvej 130, Odense",
       phoneNumber: "+45 87 65 43 21"
     },
     items: ["Double Cheeseburger", "French Fries", "Large Soda"],
     pickedUp: false,
     contactlessDelivery: true
   });
+
+  const [workerLocation, setWorkerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [restaurantCoords, setRestaurantCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [clientCoords, setClientCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [distances, setDistances] = useState<{ toRestaurant: number | null; toClient: number | null }>({ toRestaurant: null, toClient: null });
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+
+  // Request permission only once when component mounts
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermissionGranted(status === 'granted');
+      
+      if (status === 'granted') {
+        // Set up a location subscription for faster updates
+        const subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced, // Use balanced accuracy (faster)
+            distanceInterval: 10, // Update every 10 meters
+            timeInterval: 5000 // Or every 5 seconds
+          },
+          (location) => {
+            setWorkerLocation(location.coords);
+          }
+        );
+        
+        // Clean up subscription when component unmounts
+        return () => {
+          subscription.remove();
+        };
+      }
+    })();
+  }, []);
+
+  // Geocode function with caching
+  const geocodeAddress = useCallback(async (address: string) => {
+    // Return cached result if available
+    if (geocodeCache[address]) {
+      return geocodeCache[address];
+    }
+    
+    try {
+      const [result] = await Location.geocodeAsync(address);
+      if (result) {
+        // Cache the result
+        geocodeCache[address] = { 
+          latitude: result.latitude, 
+          longitude: result.longitude 
+        };
+        return geocodeCache[address];
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+    }
+    return null;
+  }, []);
+
+  // Update distances when locations change
+  useEffect(() => {
+    const updateDistances = async () => {
+      if (!currentOrder || !workerLocation) return;
+      
+      try {
+        // Geocode both addresses in parallel for speed
+        const [restaurantLocation, clientLocation] = await Promise.all([
+          geocodeAddress(currentOrder.restaurant.address),
+          geocodeAddress(currentOrder.client.address)
+        ]);
+        
+        if (restaurantLocation) {
+          setRestaurantCoords(restaurantLocation);
+          const toRestaurant = getDistance(
+            workerLocation.latitude,
+            workerLocation.longitude,
+            restaurantLocation.latitude,
+            restaurantLocation.longitude
+          );
+          setDistances(prev => ({ ...prev, toRestaurant }));
+        }
+        
+        if (restaurantLocation && clientLocation) {
+          setClientCoords(clientLocation);
+          const toClient = getDistance(
+            restaurantLocation.latitude,
+            restaurantLocation.longitude,
+            clientLocation.latitude,
+            clientLocation.longitude
+          );
+          setDistances(prev => ({ ...prev, toClient }));
+        }
+      } catch (error) {
+        console.error('Error updating distances:', error);
+      }
+    };
+    
+    updateDistances();
+  }, [currentOrder, workerLocation, geocodeAddress]);
+
+  // Haversine formula for distance in km
+  function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10; // round to 1 decimal
+  }
 
   const handlePhoneCall = (phoneNumber: string) => {
     Linking.openURL(`tel:${phoneNumber}`);
@@ -183,18 +294,18 @@ export default function HomeScreen() {
             style={styles.toggleButton}
             onPress={toggleSidebar}
           >
-            <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+            <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
           </TouchableOpacity>
           
           <TouchableOpacity 
           style={styles.chatButton}
           onPress={() => router.push('/chat')}
         >
-          <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
+          <Ionicons name="chatbubble-ellipses" size={24} color={colors.primary} />
         </TouchableOpacity>
           
           <View style={styles.centerContent}>
-            <Ionicons name="time-outline" size={80} color={COLORS.primary} />
+            <Ionicons name="time-outline" size={80} color={colors.primary} />
             <Text style={styles.awaitingOrderText}>Awaiting order</Text>
           </View>
         </View>
@@ -210,7 +321,7 @@ export default function HomeScreen() {
           style={styles.toggleButton}
           onPress={toggleSidebar}
         >
-          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
         </TouchableOpacity>
         
         {/* Add new chat icon button */}
@@ -218,7 +329,7 @@ export default function HomeScreen() {
           style={styles.chatButton}
           onPress={() => router.push('/chat')}
         >
-          <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
+          <Ionicons name="chatbubble-ellipses" size={24} color={colors.primary} />
         </TouchableOpacity>
         
         <Text style={styles.welcomeText}>Orders</Text>
@@ -228,7 +339,7 @@ export default function HomeScreen() {
           {/* Restaurant pickup details */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
-              <Ionicons name="restaurant" size={24} color={COLORS.primary} />
+              <Ionicons name="restaurant" size={24} color={colors.primary} />
               <Text style={styles.orderCardTitle}>Restaurant Pickup</Text>
             </View>
             
@@ -253,7 +364,9 @@ export default function HomeScreen() {
             
             <View style={styles.orderDetailItem}>
               <Text style={styles.orderDetailLabel}>Distance:</Text>
-              <Text style={styles.orderDetailValue}>{currentOrder.restaurant.distance} km</Text>
+              <Text style={styles.orderDetailValue}>
+                {distances.toRestaurant !== null ? `${distances.toRestaurant} km` : '...'}
+              </Text>
             </View>
             
             <View style={styles.orderDetailItem}>
@@ -283,7 +396,7 @@ export default function HomeScreen() {
           {/* Client delivery details */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
-              <Ionicons name="person" size={24} color={COLORS.primary} />
+              <Ionicons name="person" size={24} color={colors.primary} />
               <Text style={styles.orderCardTitle}>Client Delivery</Text>
             </View>
             
@@ -303,7 +416,9 @@ export default function HomeScreen() {
             
             <View style={styles.orderDetailItem}>
               <Text style={styles.orderDetailLabel}>Distance:</Text>
-              <Text style={styles.orderDetailValue}>{currentOrder.client.distance} km</Text>
+              <Text style={styles.orderDetailValue}>
+                {distances.toClient !== null ? `${distances.toClient} km` : '...'}
+              </Text>
             </View>
             
             <View style={styles.orderDetailItem}>
@@ -321,7 +436,7 @@ export default function HomeScreen() {
                 <Ionicons 
                   name={currentOrder.contactlessDelivery ? "hand-left-outline" : "people"} 
                   size={18} 
-                  color={COLORS.primary} 
+                  color={colors.primary} 
                   style={{marginRight: 6}}
                 />
                 <Text style={styles.orderDetailValue}>
@@ -346,13 +461,13 @@ export default function HomeScreen() {
           {/* Order items */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
-              <Ionicons name="fast-food" size={24} color={COLORS.primary} />
+              <Ionicons name="fast-food" size={24} color={colors.primary} />
               <Text style={styles.orderCardTitle}>Order Items</Text>
             </View>
             
             {currentOrder.items.map((item, index) => (
               <View key={index} style={styles.orderItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                 <Text style={styles.orderItemText}>{item}</Text>
               </View>
             ))}

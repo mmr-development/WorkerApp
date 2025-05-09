@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { Text, View, ScrollView, TouchableOpacity, Switch, Alert, TextInput } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { styles } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { useSidebar } from '@/hooks/useSidebar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const USER_DATA_KEY = 'worker_app_user_data';
-const ORDER_HISTORY_KEY = 'worker_app_order_history'; // Import the same key used in history.tsx
+const ORDER_HISTORY_KEY = 'worker_app_order_history';
 
 export default function SettingsScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
@@ -19,6 +19,11 @@ export default function SettingsScreen() {
     phone: '+45 12 34 56 78',
     city: 'Odense'
   });
+
+  // New state for login form
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -72,9 +77,6 @@ export default function SettingsScreen() {
           }
         ]
       );
-    } else {
-      setIsLoggedIn(true);
-      saveUserData();
     }
   };
 
@@ -99,6 +101,62 @@ export default function SettingsScreen() {
         }
       ]
     );
+  };
+
+  // Updated sign-in to use user input
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Missing Fields', 'Please enter both email and password.');
+      return;
+    }
+    setLoading(true);
+    let data;
+    try {
+      console.log('Signing in with:', { email, password });
+      const response = await fetch('https://9918-185-19-132-68.ngrok-free.app/v1/auth/sign-in/?client_id=courier', 
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            password
+          })
+        });
+      // const response = await fetch('https://dog.ceo/api/breeds/image/random');
+      console.log('Response:', response);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      data = await response.json();
+      // Save tokens if needed: data.access_token, data.refresh_token
+      setIsLoggedIn(true);
+      setUserData({
+        ...userData,
+        name: email // Or update with real name if returned
+      });
+      await saveUserData();
+      setEmail('');
+      setPassword('');
+      Alert.alert('Success', 'Signed in successfully.');
+    } catch (error) {
+      console.error('Authentication error:', error);
+      let message = 'Sign-in Failed. Please check your credentials and try again.';
+      if (
+        error instanceof TypeError &&
+        error.message &&
+        error.message.includes('Network request failed')
+      ) {
+        message = 'Could not connect to the server. Please check your internet connection or VPN, and ensure the server is reachable.';
+      }
+      Alert.alert('Sign-in Error', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -141,23 +199,57 @@ export default function SettingsScreen() {
               thumbColor={notifications ? "#1B5E20" : "#f4f3f4"}
             />
           </View>
-          
-          <TouchableOpacity 
-            style={[
-              styles.loginButton, 
-              { backgroundColor: isLoggedIn ? "#e53935" : "#1B5E20" }
-            ]}
-            onPress={toggleLoginStatus}
-          >
-            <Ionicons 
-              name={isLoggedIn ? "log-out" : "log-in"} 
-              size={24} 
-              color="white" 
-            />
-            <Text style={styles.loginButtonText}>
-              {isLoggedIn ? "Log Out" : "Log In"}
-            </Text>
-          </TouchableOpacity>
+
+          {isLoggedIn ? (
+            <TouchableOpacity 
+              style={[
+                styles.loginButton, 
+                { backgroundColor: "#e53935" }
+              ]}
+              onPress={toggleLoginStatus}
+            >
+              <Ionicons 
+                name="log-out" 
+                size={24} 
+                color="white" 
+              />
+              <Text style={styles.loginButtonText}>
+                Log Out
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ marginVertical: 20 }}>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity 
+                style={[styles.loginButton, { backgroundColor: "#1B5E20" }]}
+                onPress={handleSignIn}
+                disabled={loading}
+              >
+                <Ionicons name="log-in" size={24} color="white" />
+                <Text style={styles.loginButtonText}>
+                  {loading ? "Signing In..." : "Log In"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <TouchableOpacity 
             style={[styles.loginButton, { backgroundColor: "#e53935", marginTop: 20 }]}
             onPress={clearOrderHistory}

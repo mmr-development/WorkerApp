@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Text, ScrollView, TouchableOpacity, Animated, Dimensions, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
-import { styles, COLORS } from '../styles';
+import { styles, colors } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
@@ -87,7 +87,7 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
         <ScrollView style={styles.sidebarLinks}>
           {/* Orders button - redirects to home */}
           <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/')}>
-            <Ionicons name="list" size={24} color={COLORS.text} />
+            <Ionicons name="list" size={24} color={colors.text} />
             <Text style={styles.sidebarLinkText}>Orders</Text>
           </TouchableOpacity>
           
@@ -107,7 +107,7 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/history')}>
-            <Ionicons name="time" size={24} color={COLORS.text} />
+            <Ionicons name="time" size={24} color={colors.text} />
             <Text style={styles.sidebarLinkText}>History</Text>
           </TouchableOpacity>
           

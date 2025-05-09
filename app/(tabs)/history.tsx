@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Text, ScrollView, TouchableOpacity, View, FlatList, Modal, Alert, Image, RefreshControl } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
-import { styles, COLORS } from '../../styles';
+import { styles, colors } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
@@ -75,14 +75,14 @@ export default function HistoryScreen() {
           style={styles.toggleButton}
           onPress={toggleSidebar}
         >
-          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={COLORS.text} />
+          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.chatButton}
           onPress={() => router.push('/chat')}
         >
-          <Ionicons name="chatbubble-ellipses" size={24} color={COLORS.primary} />
+          <Ionicons name="chatbubble-ellipses" size={24} color={colors.primary} />
         </TouchableOpacity>
         
         <Text style={styles.welcomeText}>Order History</Text>
@@ -94,7 +94,7 @@ export default function HistoryScreen() {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
           >
-            <Ionicons name="time-outline" size={80} color={COLORS.accent} />
+            <Ionicons name="time-outline" size={80} color={colors.accent} />
             <Text style={styles.emptyStateText}>No order history</Text>
             <Text style={styles.emptyStateSubtext}>Completed orders will appear here</Text>
             <Text style={styles.emptyStateSubtext}>Pull down to refresh</Text>
@@ -114,7 +114,7 @@ export default function HistoryScreen() {
               >
                 {/* Card content remains the same */}
                 <View style={styles.orderCardHeader}>
-                  <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />
+                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                   <Text style={styles.orderCardTitle}>{item.id}</Text>
                 </View>
                 
@@ -135,11 +135,11 @@ export default function HistoryScreen() {
                   <View style={styles.tipContainer}>
                     {item.tipped ? (
                       <>
-                        <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                         <Text style={styles.tipAmount}>{item.tipAmount} kr</Text>
                       </>
                     ) : (
-                      <Ionicons name="close-circle" size={20} color={COLORS.error} />
+                      <Ionicons name="close-circle" size={20} color={colors.error} />
                     )}
                   </View>
                 </View>
@@ -150,7 +150,7 @@ export default function HistoryScreen() {
                     <Ionicons 
                       name={item.contactlessDelivery ? "hand-left-outline" : "people"} 
                       size={18} 
-                      color={COLORS.primary} 
+                      color={colors.primary} 
                       style={{marginRight: 6}}
                     />
                     <Text style={styles.historyDetailValue}>
