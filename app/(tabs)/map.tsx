@@ -403,21 +403,6 @@ export default function MapScreen() {
           />
         )}
       </MapView>
-      
-      {/* Recalculation status indicator */}
-      {recalculationStatus !== 'idle' && (
-        <View style={styles.recalculationIndicator}>
-          {recalculationStatus === 'calculating' ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Ionicons name="checkmark-circle" size={24} color="green" />
-          )}
-          <Text style={{ marginLeft: 8, color: colors.text }}>
-            {recalculationStatus === 'calculating' ? 'Recalculating route...' : 'Route updated'}
-          </Text>
-        </View>
-      )}
-      
       {!followUser && (
         <View style={{ position: 'absolute', top: 40, right: 20 }}>
           <Button
