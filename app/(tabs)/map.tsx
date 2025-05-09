@@ -86,7 +86,7 @@ export default function MapScreen() {
   const [hasArrived, setHasArrived] = useState(false);
   const [recalculationStatus, setRecalculationStatus] = useState<'idle' | 'calculating' | 'success'>('idle');
   const [refreshing, setRefreshing] = useState(false);
-  const pullThreshold = 100; // Distance in pixels needed to trigger refresh
+  const pullThreshold = 100;
   const [pullStartY, setPullStartY] = useState(0);
   const mapRef = useRef<MapView>(null);
   const [closestPoint, setClosestPoint] = useState<LatLng | null>(null);
@@ -342,11 +342,33 @@ export default function MapScreen() {
         }}
       />
 
+      {/* Recenter button - moved below refresh zone for higher zIndex */}
+      {!followUser && (
+        <TouchableOpacity
+          style={styles.recenterButtonContainer}
+          activeOpacity={0.8}
+          onPress={() => {
+            setFollowUser(true);
+            if (userLocation) {
+              mapRef.current?.animateCamera({
+                center: userLocation,
+                heading: heading ?? 0,
+                pitch: 0,
+                zoom: 17,
+              });
+            }
+          }}
+        >
+          <Text style={{ color: colors.white, fontWeight: 'bold', paddingHorizontal: 18, paddingVertical: 10, fontSize: 16 }}>
+            Recenter
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Pull to refresh indicator */}
       {refreshing && (
         <View style={styles.pullRefreshIndicator}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={{ marginLeft: 8, color: colors.text }}>Refreshing route...</Text>
+          <ActivityIndicator size="small" color={colors.white} />
         </View>
       )}
 
@@ -365,13 +387,17 @@ export default function MapScreen() {
           <Marker
             coordinate={userLocation}
             title="You"
-            pinColor="blue"
+            pinColor={colors.primary} // Use company green
             rotation={followUser ? 180 : (heading ?? 0)}
             anchor={{ x: 0.5, y: 0.5 }}
           />
         )}
         {destination && (
-          <Marker coordinate={destination} title="Destination" />
+          <Marker
+            coordinate={destination}
+            title="Destination"
+            pinColor={colors.accent} // Use accent green
+          />
         )}
         {routeCoords.length > 0 && userLocation && (
           <>
@@ -384,39 +410,12 @@ export default function MapScreen() {
             <Polyline
               coordinates={routeCoords.slice(getClosestPointIndex(userLocation, routeCoords))}
               strokeWidth={4}
-              strokeColor="red"
+              strokeColor="green"
               zIndex={2}
             />
           </>
         )}
-        {/* Closest point marker */}
-        {closestPoint && (
-          <Marker
-            coordinate={closestPoint}
-            title="Closest Point"
-            pinColor="orange"
-            description="This is the closest route coordinate or micropoint"
-          />
-        )}
       </MapView>
-      {!followUser && (
-        <View style={{ position: 'absolute', top: 40, right: 20 }}>
-          <Button
-            title="Recenter"
-            onPress={() => {
-              setFollowUser(true);
-              if (userLocation) {
-                mapRef.current?.animateCamera({
-                  center: userLocation,
-                  heading: heading ?? 0,
-                  pitch: 0,
-                  zoom: 17,
-                });
-              }
-            }}
-          />
-        </View>
-      )}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
       <Modal
         visible={arrivedModalVisible}
