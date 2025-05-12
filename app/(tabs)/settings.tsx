@@ -1,29 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, ScrollView, TouchableOpacity, Switch, Alert, TextInput } from 'react-native';
+import { Text, View, ScrollView, TouchableOpacity, Switch, Alert, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { styles } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
+import { API_BASE, clearTokens, saveTokens } from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const USER_DATA_KEY = 'worker_app_user_data';
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
+const REFRESH_TOKEN_KEY = 'worker_app_refresh_token';
 
 export default function SettingsScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const [notifications, setNotifications] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [userData, setUserData] = useState({
-    name: 'John Doe',
-    phone: '+45 12 34 56 78',
-    city: 'Odense'
-  });
-
-  // New state for login form
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshToken, setRefreshToken] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Change password modal state
+  const [changePwModalVisible, setChangePwModalVisible] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+
+  // Sign up modal state
+  const [signUpVisible, setSignUpVisible] = useState(false);
+  const [signUpLoading, setSignUpLoading] = useState(false);
+  const [signUpFirstName, setSignUpFirstName] = useState('');
+  const [signUpLastName, setSignUpLastName] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpPhone, setSignUpPhone] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
 
   useEffect(() => {
     loadUserData();
@@ -32,25 +45,31 @@ export default function SettingsScreen() {
   const loadUserData = async () => {
     try {
       const savedUserData = await AsyncStorage.getItem(USER_DATA_KEY);
+      const savedRefreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
       if (savedUserData) {
         const parsedData = JSON.parse(savedUserData);
         setIsLoggedIn(parsedData.isLoggedIn);
-        if (parsedData.userData) {
-          setUserData(parsedData.userData);
-        }
+        if (parsedData.email) setEmail(parsedData.email);
+      }
+      if (savedRefreshToken) {
+        setRefreshToken(savedRefreshToken);
       }
     } catch (error) {
       console.error('Error loading user data:', error);
     }
   };
 
-  const saveUserData = async () => {
+  const saveUserData = async (token?: string, emailToRemember?: string) => {
     try {
       const dataToSave = {
-        isLoggedIn,
-        userData
+        isLoggedIn: true,
+        email: emailToRemember || email
       };
       await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(dataToSave));
+      if (token) {
+        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, token);
+        setRefreshToken(token);
+      }
     } catch (error) {
       console.error('Error saving user data:', error);
     }
@@ -58,6 +77,77 @@ export default function SettingsScreen() {
 
   const toggleNotifications = () => {
     setNotifications(prev => !prev);
+  };
+
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Missing Fields', 'Please enter both email and password.');
+      return;
+    }
+    setLoading(true);
+    let data;
+    try {
+      const response = await fetch(`${API_BASE}/v1/auth/sign-in/?client_id=courier`, 
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            password
+          })
+        });
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      data = await response.json();
+      setIsLoggedIn(true);
+      await saveUserData(data.refresh_token, email);
+      await saveTokens(data.access_token, data.refresh_token);
+      setEmail(email);
+      setPassword('');
+    } catch (error) {
+      let message = 'Sign-in Failed. Please check your credentials and try again.';
+      if (
+        error instanceof TypeError &&
+        error.message &&
+        error.message.includes('Network request failed')
+      ) {
+        message = 'Could not connect to the server. Please check your internet connection or VPN, and ensure the server is reachable.';
+      }
+      Alert.alert('Sign-in Error', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!refreshToken) {
+      setIsLoggedIn(false);
+      setEmail('');
+      await AsyncStorage.removeItem(USER_DATA_KEY);
+      await clearTokens(); // Use the utility function
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/v1/auth/sign-out/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+    } catch (error) {
+      // Ignore errors on logout
+    }
+    setIsLoggedIn(false);
+    setEmail('');
+    await AsyncStorage.removeItem(USER_DATA_KEY);
+    await clearTokens(); // Use the utility function
+    setRefreshToken(null);
   };
 
   const toggleLoginStatus = () => {
@@ -70,10 +160,7 @@ export default function SettingsScreen() {
           { 
             text: "Log Out", 
             style: "destructive",
-            onPress: () => {
-              setIsLoggedIn(false);
-              saveUserData();
-            }
+            onPress: handleLogout
           }
         ]
       );
@@ -103,59 +190,82 @@ export default function SettingsScreen() {
     );
   };
 
-  // Updated sign-in to use user input
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert('Missing Fields', 'Please enter both email and password.');
+  // Change password logic
+  const handleChangePassword = async () => {
+    if (!currentPw || !newPw || !confirmPw) {
+      Alert.alert('Missing Fields', 'Please fill in all password fields.');
       return;
     }
-    setLoading(true);
-    let data;
+    if (newPw !== confirmPw) {
+      Alert.alert('Error', 'New password and confirmation do not match.');
+      return;
+    }
+    setPwLoading(true);
     try {
-      console.log('Signing in with:', { email, password });
-      const response = await fetch('https://9918-185-19-132-68.ngrok-free.app/v1/auth/sign-in/?client_id=courier', 
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            email,
-            password
-          })
-        });
-      // const response = await fetch('https://dog.ceo/api/breeds/image/random');
-      console.log('Response:', response);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      data = await response.json();
-      // Save tokens if needed: data.access_token, data.refresh_token
-      setIsLoggedIn(true);
-      setUserData({
-        ...userData,
-        name: email // Or update with real name if returned
+      const response = await fetch(`${API_BASE}/v1/auth/change-password/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          current_password: currentPw,
+          new_password: newPw,
+          confirm_password: confirmPw
+        })
       });
-      await saveUserData();
-      setEmail('');
-      setPassword('');
-      Alert.alert('Success', 'Signed in successfully.');
-    } catch (error) {
-      console.error('Authentication error:', error);
-      let message = 'Sign-in Failed. Please check your credentials and try again.';
-      if (
-        error instanceof TypeError &&
-        error.message &&
-        error.message.includes('Network request failed')
-      ) {
-        message = 'Could not connect to the server. Please check your internet connection or VPN, and ensure the server is reachable.';
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Password change failed');
       }
-      Alert.alert('Sign-in Error', message);
+      Alert.alert('Success', 'Password changed successfully.');
+      setChangePwModalVisible(false);
+      setCurrentPw('');
+      setNewPw('');
+      setConfirmPw('');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to change password.');
     } finally {
-      setLoading(false);
+      setPwLoading(false);
+    }
+  };
+
+  // Sign up logic
+  const handleSignUp = async () => {
+    if (!signUpFirstName || !signUpLastName || !signUpEmail || !signUpPhone || !signUpPassword) {
+      Alert.alert('Missing Fields', 'Please fill in all fields.');
+      return;
+    }
+    setSignUpLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/auth/sign-up/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          first_name: signUpFirstName,
+          last_name: signUpLastName,
+          email: signUpEmail,
+          phone_number: signUpPhone,
+          password: signUpPassword
+        })
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Sign up failed');
+      }
+      setSignUpVisible(false);
+      setSignUpFirstName('');
+      setSignUpLastName('');
+      setSignUpEmail('');
+      setSignUpPhone('');
+      setSignUpPassword('');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to sign up.');
+    } finally {
+      setSignUpLoading(false);
     }
   };
 
@@ -172,22 +282,16 @@ export default function SettingsScreen() {
         <Text style={styles.welcomeText}>Settings</Text>
         
         <ScrollView style={styles.settingsList} contentContainerStyle={styles.settingsContentContainer}>
-          <View style={styles.userInfoContainer}>
+          <View style={styles.userInfoContainerWide}>
             <Ionicons name="person-circle" size={60} color="#1B5E20" />
             <View style={styles.userTextInfo}>
               <Text style={styles.userName}>
-                {isLoggedIn ? `Logged in as: ${userData.name}` : "Not logged in"}
+                {isLoggedIn ? `Logged in as: ${email}` : "Not logged in"}
               </Text>
-              {isLoggedIn && (
-                <>
-                  <Text style={styles.userDetail}>{userData.phone}</Text>
-                  <Text style={styles.userDetail}>City: {userData.city}</Text>
-                </>
-              )}
             </View>
           </View>
 
-          <View style={styles.settingItem}>
+          <View style={styles.settingItemWide}>
             <View style={styles.settingTextContainer}>
               <Ionicons name="notifications" size={24} color="#1B5E20" />
               <Text style={styles.settingTitle}>Notifications</Text>
@@ -200,10 +304,20 @@ export default function SettingsScreen() {
             />
           </View>
 
+          {isLoggedIn && (
+            <TouchableOpacity
+              style={[styles.loginButtonSettings, { backgroundColor: "#1976d2" }]}
+              onPress={() => setChangePwModalVisible(true)}
+            >
+              <Ionicons name="key" size={24} color="white" />
+              <Text style={styles.loginButtonText}>Change Password</Text>
+            </TouchableOpacity>
+          )}
+
           {isLoggedIn ? (
             <TouchableOpacity 
               style={[
-                styles.loginButton, 
+                styles.loginButtonSettings, 
                 { backgroundColor: "#e53935" }
               ]}
               onPress={toggleLoginStatus}
@@ -218,40 +332,143 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           ) : (
-            <View style={{ marginVertical: 20 }}>
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity 
-                style={[styles.loginButton, { backgroundColor: "#1B5E20" }]}
-                onPress={handleSignIn}
-                disabled={loading}
+            <>
+              <View style={styles.loginFieldsContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                />
+                <View style={styles.passwordInputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((prev) => !prev)}
+                    style={styles.passwordEyeIcon}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off" : "eye"}
+                      size={22}
+                      color="#1B5E20"
+                    />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity 
+                  style={styles.loginButtonSettings}
+                  onPress={handleSignIn}
+                  disabled={loading}
+                >
+                  <Ionicons name="log-in" size={24} color="white" />
+                  <Text style={styles.loginButtonText}>
+                    {loading ? "Signing In..." : "Log In"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.loginButtonSettings, styles.signUpButton]}
+                  onPress={() => setSignUpVisible(true)}
+                >
+                  <Ionicons name="person-add" size={24} color="white" />
+                  <Text style={styles.loginButtonText}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Sign Up Modal */}
+              <Modal
+                visible={signUpVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setSignUpVisible(false)}
               >
-                <Ionicons name="log-in" size={24} color="white" />
-                <Text style={styles.loginButtonText}>
-                  {loading ? "Signing In..." : "Log In"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                <View style={{
+                  flex: 1,
+                  backgroundColor: 'rgba(0,0,0,0.4)',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}>
+                  <View style={{
+                    backgroundColor: 'white',
+                    borderRadius: 12,
+                    padding: 24,
+                    width: '85%',
+                    alignItems: 'center'
+                  }}>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Sign Up</Text>
+                    <TextInput
+                      style={styles.inputSettings}
+                      placeholder="First Name"
+                      value={signUpFirstName}
+                      onChangeText={setSignUpFirstName}
+                      autoCapitalize="words"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Last Name"
+                      value={signUpLastName}
+                      onChangeText={setSignUpLastName}
+                      autoCapitalize="words"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      value={signUpEmail}
+                      onChangeText={setSignUpEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Phone Number"
+                      value={signUpPhone}
+                      onChangeText={setSignUpPhone}
+                      keyboardType="phone-pad"
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      value={signUpPassword}
+                      onChangeText={setSignUpPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                    <View style={{ flexDirection: 'row', marginTop: 16 }}>
+                      <TouchableOpacity
+                        style={[styles.primaryButton, { backgroundColor: "#1976d2" }]}
+                        onPress={handleSignUp}
+                        disabled={signUpLoading}
+                      >
+                        {signUpLoading ? (
+                          <ActivityIndicator color="white" />
+                        ) : (
+                          <Text style={styles.buttonText}>Sign Up</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.secondaryButton, { marginLeft: 10 }]}
+                        onPress={() => setSignUpVisible(false)}
+                        disabled={signUpLoading}
+                      >
+                        <Text style={styles.buttonText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </Modal>
+            </>
           )}
 
           <TouchableOpacity 
-            style={[styles.loginButton, { backgroundColor: "#e53935", marginTop: 20 }]}
+            style={[styles.loginButtonSettings, { backgroundColor: "#e53935", marginTop: 20 }]}
             onPress={clearOrderHistory}
           >
             <Ionicons name="trash" size={24} color="white" />
@@ -259,6 +476,78 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {/* Change Password Modal */}
+      <Modal
+        visible={changePwModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setChangePwModalVisible(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: '85%',
+            alignItems: 'center'
+          }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Change Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Current Password"
+              value={currentPw}
+              onChangeText={setCurrentPw}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="New Password"
+              value={newPw}
+              onChangeText={setNewPw}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm New Password"
+              value={confirmPw}
+              onChangeText={setConfirmPw}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.primaryButton, { backgroundColor: "#1976d2" }]}
+                onPress={handleChangePassword}
+                disabled={pwLoading}
+              >
+                {pwLoading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.buttonText}>Change</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, { marginLeft: 10 }]}
+                onPress={() => setChangePwModalVisible(false)}
+                disabled={pwLoading}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
