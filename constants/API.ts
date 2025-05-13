@@ -1,4 +1,4 @@
-export const API_BASE = 'https://68fb-185-19-132-68.ngrok-free.app';
+export const API_BASE = 'https://74d7-212-27-16-17.ngrok-free.app';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

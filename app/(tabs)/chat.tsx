@@ -39,33 +39,50 @@ export default function ChatPage() {
   // WebSocket ref
   const wsRef = useRef<WebSocket | null>(null);
 
+  const [userId, setUserId] = useState<string | null>(null);
+
   useEffect(() => {
-    const fetchChats = async () => {
+    const fetchUserId = async () => {
       try {
-        const accessToken = await getAccessToken();
-        if (!accessToken) {
-          Alert.alert('Authorization Error', 'You must be logged in to view chats.');
-          return;
+        const userData = await AsyncStorage.getItem('worker_app_user_data');
+        if (userData) {
+          const parsed = JSON.parse(userData);
+          setUserId(parsed.user_id || null);
         }
-        const response = await fetch(`${API_BASE}/v1/chats/`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'accept': '*/*',
-          },
-        });
-        if (!response.ok) {
-          throw new Error('Failed to fetch chats');
-        }
-        const data = await response.json();
-        const rooms: ChatRoom[] = data.chats.map((chat: any) => ({
-          id: String(chat.id),
-          name: `Chat ${chat.id}`,
-        }));
-        setChatRooms(rooms);
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Could not load chats.');
-      }
+      } catch {}
     };
+    fetchUserId();
+  }, []);
+
+  // Move fetchChats outside useEffect so you can call it after creating a chat
+  const fetchChats = async () => {
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        Alert.alert('Authorization Error', 'You must be logged in to view chats.');
+        return;
+      }
+      const response = await fetch(`${API_BASE}/v1/chats/`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'accept': '*/*',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch chats');
+      }
+      const data = await response.json();
+      const rooms: ChatRoom[] = data.chats.map((chat: any) => ({
+        id: String(chat.id),
+        name: `Chat ${chat.id}`,
+      }));
+      setChatRooms(rooms);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Could not load chats.');
+    }
+  };
+
+  useEffect(() => {
     fetchChats();
   }, []);
 
@@ -95,29 +112,31 @@ export default function ChatPage() {
       try {
         const data = JSON.parse(event.data);
         console.log('Received message from WS:', data);
+
         if (data.type === 'history' && Array.isArray(data.messages)) {
           const history: Message[] = data.messages.map((msg: any, idx: number) => ({
             id: msg.id !== undefined && msg.id !== null ? String(msg.id) : `history-${msg.created_at || idx}`,
-            text: msg.type === 'text' ? msg.content : undefined,
-            image: msg.type === 'image' ? msg.content : undefined,
+            text: msg.content?.text, // Access the text field inside content
+            image: msg.content?.image, // Access the image field inside content
             sender: msg.sender_id || 'User',
             timestamp: msg.created_at,
           }));
-          setMessages(prev => ({
+          setMessages((prev) => ({
             ...prev,
             [activeRoom.id]: history,
           }));
         }
+
         if (data.type === 'message' && data.message) {
           const msgData = data.message;
           const msg: Message = {
             id: msgData.id !== undefined && msgData.id !== null ? String(msgData.id) : `msg-${Date.now()}`,
-            text: msgData.type === 'text' ? msgData.content : undefined,
-            image: msgData.type === 'image' ? msgData.content : undefined,
+            text: msgData.content?.text, // Access the text field inside content
+            image: msgData.content?.image, // Access the image field inside content
             sender: msgData.sender_id || 'User',
             timestamp: msgData.created_at,
           };
-          setMessages(prev => ({
+          setMessages((prev) => ({
             ...prev,
             [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
           }));
@@ -171,17 +190,11 @@ export default function ChatPage() {
         console.log('Chat creation error:', errorData);
         throw new Error(errorData.detail || errorData.message || 'Failed to create chat');
       }
-      const data = await response.json();
-      const chatName =
-        type === 'support'
-          ? `Support Ticket ${data.id}`
-          : `Chat ${data.id}`;
-      const newRoom: ChatRoom = { id: String(data.id), name: chatName };
-      setChatRooms([...chatRooms, newRoom]);
-      setActiveRoom(newRoom);
-      if (!messages[newRoom.id]) {
-        setMessages(prev => ({ ...prev, [newRoom.id]: [] }));
-      }
+      // Optionally, you can use the returned chat data if needed
+      await response.json();
+
+      // Refresh chat list so the new chat appears immediately
+      await fetchChats();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Could not create chat.');
     }
@@ -226,8 +239,9 @@ export default function ChatPage() {
 
     const payload = {
       action: 'message',
-      type: 'text',
-      content: input,
+      content: {
+        text: input.trim(),
+      },
     };
 
     console.log('Sending message via WS:', payload); // <-- Log sent message
@@ -357,25 +371,64 @@ export default function ChatPage() {
       <FlatList
         ref={flatListRef}
         data={messages[activeRoom!.id] || []}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.chatMessageRow}>
-            <View style={styles.chatMessageBubble}>
-              <View style={styles.chatMessageHeader}>
-                <Text style={styles.chatMessageSender}>{item.sender}:</Text>
-                <Text style={styles.chatMessageTimestamp}>
-                  {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                </Text>
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => {
+          const isMine = item.sender === userId || item.sender === 'You';
+          return (
+            <View
+              style={[
+                styles.chatMessageRow,
+                isMine ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
+              ]}
+            >
+              <View
+                style={[
+                  styles.chatMessageBubble,
+                  isMine
+                    ? { backgroundColor: colors.primary, alignSelf: 'flex-end' }
+                    : { backgroundColor: colors.backgroundLight, alignSelf: 'flex-start' },
+                ]}
+              >
+                <View style={styles.chatMessageHeader}>
+                  <Text
+                    style={[
+                      styles.chatMessageSender,
+                      isMine ? { color: colors.white } : {},
+                    ]}
+                  >
+                    {isMine ? 'You' : item.sender}:
+                  </Text>
+                  <Text
+                    style={[
+                      styles.chatMessageTimestamp,
+                      isMine ? { color: colors.white } : {},
+                    ]}
+                  >
+                    {item.timestamp
+                      ? new Date(item.timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : ''}
+                  </Text>
+                </View>
+                {item.text ? (
+                  <Text
+                    style={[
+                      styles.chatMessageText,
+                      isMine ? { color: colors.white } : {},
+                    ]}
+                  >
+                    {item.text}
+                  </Text>
+                ) : null}
+                {item.image ? (
+                  <Image source={{ uri: item.image }} style={styles.chatMessageImage} />
+                ) : null}
               </View>
-              {item.text ? (
-                <Text style={styles.chatMessageText}>{item.text}</Text>
-              ) : null}
-              {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.chatMessageImage} />
-              ) : null}
             </View>
-          </View>
-        )}
+          );
+        }}
         contentContainerStyle={{ padding: 12 }}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
