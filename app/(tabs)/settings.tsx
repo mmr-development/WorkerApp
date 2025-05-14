@@ -272,12 +272,15 @@ export default function SettingsScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.mainContent}>
-        <TouchableOpacity 
-          style={styles.toggleButton}
-          onPress={toggleSidebar}
-        >
-          <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color="#1B5E20" />
-        </TouchableOpacity>
+        {/* Only show sidebar toggle button if logged in */}
+        {isLoggedIn && (
+          <TouchableOpacity 
+            style={styles.toggleButton}
+            onPress={toggleSidebar}
+          >
+            <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color="#1B5E20" />
+          </TouchableOpacity>
+        )}
         
         <Text style={styles.welcomeText}>Settings</Text>
         
@@ -291,18 +294,23 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <View style={styles.settingItemWide}>
-            <View style={styles.settingTextContainer}>
-              <Ionicons name="notifications" size={24} color="#1B5E20" />
-              <Text style={styles.settingTitle}>Notifications</Text>
-            </View>
-            <Switch 
-              value={notifications} 
-              onValueChange={toggleNotifications}
-              trackColor={{ false: "#767577", true: "#81c784" }}
-              thumbColor={notifications ? "#1B5E20" : "#f4f3f4"}
-            />
-          </View>
+          {/* Only show notifications toggle, sidebar button, and clear order history if logged in */}
+          {isLoggedIn && (
+            <>
+              <View style={styles.settingItemWide}>
+                <View style={styles.settingTextContainer}>
+                  <Ionicons name="notifications" size={24} color="#1B5E20" />
+                  <Text style={styles.settingTitle}>Notifications</Text>
+                </View>
+                <Switch 
+                  value={notifications} 
+                  onValueChange={toggleNotifications}
+                  trackColor={{ false: "#767577", true: "#81c784" }}
+                  thumbColor={notifications ? "#1B5E20" : "#f4f3f4"}
+                />
+              </View>
+            </>
+          )}
 
           {isLoggedIn && (
             <TouchableOpacity
@@ -467,13 +475,16 @@ export default function SettingsScreen() {
             </>
           )}
 
-          <TouchableOpacity 
-            style={[styles.loginButtonSettings, { backgroundColor: "#e53935", marginTop: 20 }]}
-            onPress={clearOrderHistory}
-          >
-            <Ionicons name="trash" size={24} color="white" />
-            <Text style={styles.loginButtonText}>Clear Order History</Text>
-          </TouchableOpacity>
+          {/* Only show clear order history if logged in */}
+          {isLoggedIn && (
+            <TouchableOpacity 
+              style={[styles.loginButtonSettings, { backgroundColor: "#e53935", marginTop: 20 }]}
+              onPress={clearOrderHistory}
+            >
+              <Ionicons name="trash" size={24} color="white" />
+              <Text style={styles.loginButtonText}>Clear Order History</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
 

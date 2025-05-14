@@ -34,6 +34,7 @@ export type OrderDetails = {
 
 // Add storage key for history
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
+const USER_DATA_KEY = 'worker_app_user_data'; // Add this if not already present
 
 // Add a geocoding cache object outside component
 const geocodeCache: Record<string, { latitude: number; longitude: number }> = {};
@@ -63,6 +64,26 @@ export default function HomeScreen() {
   const [clientCoords, setClientCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distances, setDistances] = useState<{ toRestaurant: number | null; toClient: number | null }>({ toRestaurant: null, toClient: null });
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+
+  // Check login status on mount and redirect if not logged in
+  useEffect(() => {
+    const checkLogin = async () => {
+      try {
+        const savedUserData = await AsyncStorage.getItem(USER_DATA_KEY);
+        if (!savedUserData) {
+          router.replace('/settings');
+          return;
+        }
+        const parsedData = JSON.parse(savedUserData);
+        if (!parsedData.isLoggedIn) {
+          router.replace('/settings');
+        }
+      } catch (error) {
+        router.replace('/settings');
+      }
+    };
+    checkLogin();
+  }, [router]);
 
   // Request permission only once when component mounts
   useEffect(() => {
