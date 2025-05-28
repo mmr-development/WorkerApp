@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Text, ScrollView, TouchableOpacity, View, Linking, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Text, ScrollView, TouchableOpacity, View, Linking, Alert, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { styles, colors } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { API_BASE } from '@/constants/API';
 
 export type OrderDetails = {
   id: string;
@@ -42,28 +43,16 @@ const geocodeCache: Record<string, { latitude: number; longitude: number }> = {}
 export default function HomeScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const router = useRouter();
-  const [currentOrder, setCurrentOrder] = useState<OrderDetails | null>({
-    id: "#A1B2C3",
-    restaurant: {
-      name: "Burger Palace",
-      address: "Ørbækvej 75, Odense",
-      phoneNumber: "+45 12 34 56 78"
-    },
-    client: { 
-      name: "John Doe",
-      address: "Munkebjergvej 130, Odense",
-      phoneNumber: "+45 87 65 43 21"
-    },
-    items: ["Double Cheeseburger", "French Fries", "Large Soda"],
-    pickedUp: false,
-    contactlessDelivery: true
-  });
+  const [currentOrder, setCurrentOrder] = useState<OrderDetails | null>(null);
 
   const [workerLocation, setWorkerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [restaurantCoords, setRestaurantCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [clientCoords, setClientCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distances, setDistances] = useState<{ toRestaurant: number | null; toClient: number | null }>({ toRestaurant: null, toClient: null });
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   // Check login status on mount and redirect if not logged in
   useEffect(() => {
@@ -114,15 +103,13 @@ export default function HomeScreen() {
 
   // Geocode function with caching
   const geocodeAddress = useCallback(async (address: string) => {
-    // Return cached result if available
+    if (!address || address === 'string') return null;
     if (geocodeCache[address]) {
       return geocodeCache[address];
     }
-    
     try {
       const [result] = await Location.geocodeAsync(address);
       if (result) {
-        // Cache the result
         geocodeCache[address] = { 
           latitude: result.latitude, 
           longitude: result.longitude 
@@ -135,6 +122,19 @@ export default function HomeScreen() {
     return null;
   }, []);
 
+  const sendStatusUpdate = (deliveryId: string, newStatus: string, photoBase64?: string) => {
+  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    const payload: any = {
+      type: 'status_update',
+      delivery_id: deliveryId,
+      status: newStatus,
+    };
+    if (photoBase64) {
+      payload.photo = photoBase64;
+    }
+    wsRef.current.send(JSON.stringify(payload));
+  }
+};
   // Update distances when locations change
   useEffect(() => {
     const updateDistances = async () => {
@@ -194,20 +194,26 @@ export default function HomeScreen() {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
-  const confirmPickup = () => {
-    if (currentOrder) {
-      setCurrentOrder({
-        ...currentOrder,
-        pickedUp: true
-      });
-    }
-  };
+const confirmPickup = () => {
+  if (currentOrder) {
+    setCurrentOrder({
+      ...currentOrder,
+      pickedUp: true
+    });
+    sendStatusUpdate(currentOrder.id, 'picked_up');
+    // Send in_transit status after picked_up
+    setTimeout(() => {
+      sendStatusUpdate(currentOrder.id, 'in_transit');
+    }, 500);
+  }
+};
 
   const confirmDelivery = async () => {
     if (!currentOrder) return;
-    
+
     try {
-      // If contactless delivery, require a photo
+      let photoBase64: string | undefined = undefined;
+
       if (currentOrder.contactlessDelivery) {
         // Request camera permissions
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -219,7 +225,7 @@ export default function HomeScreen() {
           );
           return;
         }
-        
+
         // Launch camera
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -228,7 +234,7 @@ export default function HomeScreen() {
           quality: 0.5,
           base64: true,
         });
-        
+
         if (result.canceled) {
           Alert.alert(
             "Photo Required",
@@ -237,12 +243,11 @@ export default function HomeScreen() {
           );
           return;
         }
-        
-        // Get the base64 string of the photo
-        const photoBase64 = result.assets && result.assets[0].base64 
+
+        photoBase64 = result.assets && result.assets[0].base64 
           ? `data:image/jpeg;base64,${result.assets[0].base64}`
-          : null;
-        
+          : undefined;
+
         if (!photoBase64) {
           Alert.alert(
             "Photo Required",
@@ -251,32 +256,22 @@ export default function HomeScreen() {
           );
           return;
         }
-        
-        // Create completed order object with photo
-        const completedOrder: OrderDetails = {
-          ...currentOrder,
-          completed: true,
-          deliveryTime: new Date().toISOString(),
-          tipped: true,  // For demo
-          tipAmount: 25, // For demo
-          deliveryPhoto: photoBase64
-        };
-        
-        // Save to history and clear current order
-        await saveOrderToHistory(completedOrder);
-      } else {
-        // For non-contactless delivery - no photo and no additional confirmation needed
-        const completedOrder: OrderDetails = {
-          ...currentOrder,
-          completed: true,
-          deliveryTime: new Date().toISOString(),
-          tipped: true,  // For demo
-          tipAmount: 25  // For demo
-        };
-        
-        // Save to history and clear current order
-        await saveOrderToHistory(completedOrder);
       }
+
+      // Send status update via WebSocket (with photo if contactless)
+      sendStatusUpdate(currentOrder.id, 'delivered', photoBase64);
+
+      // Save to history and clear current order
+      const completedOrder: OrderDetails = {
+        ...currentOrder,
+        completed: true,
+        deliveryTime: new Date().toISOString(),
+        tipped: true,  // For demo
+        tipAmount: 25, // For demo
+        ...(photoBase64 ? { deliveryPhoto: photoBase64 } : {})
+      };
+      await saveOrderToHistory(completedOrder);
+
     } catch (error) {
       console.error('Error processing delivery:', error);
       Alert.alert(
@@ -300,12 +295,277 @@ export default function HomeScreen() {
     }
   };
 
-  const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
-    router.push({
-      pathname: '/map',
-      params: { address, type }
-    });
+const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
+  let coords = null;
+  if (type === 'restaurant' && restaurantCoords) {
+    coords = restaurantCoords;
+  } else if (type === 'client' && clientCoords) {
+    coords = clientCoords;
+  }
+  router.push({
+    pathname: '/map',
+    params: {
+      address,
+      type,
+      // Swap order: longitude first, then latitude
+      longitude: coords ? coords.longitude.toString() : undefined,
+      latitude: coords ? coords.latitude.toString() : undefined,
+    }
+  });
+};
+
+  // WebSocket connection for real-time order assignment
+  useEffect(() => {
+    // Convert API_BASE to ws:// or wss://
+    const wsUrl = API_BASE.replace(/^http/, 'ws') + '/ws/courier/delivery';
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = async () => {
+      // Optionally send auth token if backend requires it
+      const token = await AsyncStorage.getItem('worker_app_access_token');
+      if (token) {
+        ws.send(JSON.stringify({ type: 'authorization', token }));
+      }
+    };
+
+    ws.onmessage = async (event) => {
+      console.log('WebSocket message:', event.data);
+      try {
+        const data = JSON.parse(event.data);
+
+        // Handle delivery_assigned
+        if (data.type === 'delivery_assigned' && data.payload?.deliveries?.length) {
+          const delivery = data.payload.deliveries[0];
+          const order: OrderDetails = {
+            id: delivery.id.toString(),
+            restaurant: {
+              name: delivery.pickup?.name || '',
+              address: [
+                delivery.pickup?.street,
+                delivery.pickup?.address,
+                delivery.pickup?.postal_code,
+                delivery.pickup?.city,
+                delivery.pickup?.country
+              ].filter(Boolean).join(', '),
+              phoneNumber: delivery.pickup?.phone || '',
+            },
+            client: {
+              name: delivery.delivery?.customer_name || '',
+              address: [
+                delivery.delivery?.address,
+                delivery.delivery?.postal_code,
+                delivery.delivery?.city,
+                delivery.delivery?.country
+              ].filter(Boolean).join(', '),
+              phoneNumber: delivery.delivery?.phone || '',
+            },
+            items: (delivery.order?.items || []).map((item: any) =>
+              `${item.quantity}x ${item.item_name}${item.note && item.note !== 'string' ? ` (${item.note})` : ''}`
+            ),
+            pickedUp: delivery.status === 'picked_up',
+            completed: delivery.status === 'delivered',
+            deliveryTime: delivery.estimated_delivery_time,
+            contactlessDelivery: false,
+          };
+          setCurrentOrder(order);
+        }
+
+        // Handle current_deliveries (NEW)
+        if (data.type === 'current_deliveries' && data.payload?.deliveries?.length) {
+          const delivery = data.payload.deliveries[0];
+          const order: OrderDetails = {
+            id: delivery.id.toString(),
+            restaurant: {
+              name: delivery.pickup?.name || '',
+              address: [
+                delivery.pickup?.street,
+                delivery.pickup?.address,
+                delivery.pickup?.postal_code,
+                delivery.pickup?.city,
+                delivery.pickup?.country
+              ].filter(Boolean).join(', '),
+              phoneNumber: delivery.pickup?.phone || '',
+            },
+            client: {
+              name: delivery.delivery?.customer_name || '',
+              address: [
+                delivery.delivery?.address,
+                delivery.delivery?.postal_code,
+                delivery.delivery?.city,
+                delivery.delivery?.country
+              ].filter(Boolean).join(', '),
+              phoneNumber: delivery.delivery?.phone || '',
+            },
+            items: (delivery.order?.items || []).map((item: any) =>
+              `${item.quantity}x ${item.item_name}${item.note && item.note !== 'string' ? ` (${item.note})` : ''}`
+            ),
+            pickedUp: delivery.status === 'picked_up',
+            completed: delivery.status === 'delivered',
+            deliveryTime: delivery.estimated_delivery_time,
+            contactlessDelivery: false,
+          };
+          setCurrentOrder(order);
+        }
+
+        // Handle location_request
+        if (data.type === 'location_request') {
+          if (workerLocation) {
+            ws.send(JSON.stringify({
+              type: 'location_response',
+              payload: {
+                latitude: workerLocation.latitude,
+                longitude: workerLocation.longitude,
+                timestamp: new Date().toISOString(),
+                request_id: data.payload?.request_id,
+              }
+            }));
+          }
+        }
+
+        // Handle order cancellation (status: 'canceled')
+    if (
+      (data.type === 'delivery_assigned' || data.type === 'current_deliveries') &&
+      data.payload?.deliveries?.length
+    ) {
+      const delivery = data.payload.deliveries[0];
+      if (delivery.status === 'canceled' && currentOrder && delivery.id.toString() === currentOrder.id) {
+        setCurrentOrder(null);
+        Alert.alert(
+          "Order Cancelled",
+          "The current order has been cancelled.",
+          [{ text: "OK" }]
+        );
+        return; // Don't process as a new order
+      }
+      const order: OrderDetails = {
+        id: delivery.id.toString(),
+        restaurant: {
+          name: delivery.pickup?.name || '',
+          address: [
+            delivery.pickup?.street,
+            delivery.pickup?.address,
+            delivery.pickup?.postal_code,
+            delivery.pickup?.city,
+            delivery.pickup?.country
+          ].filter(Boolean).join(', '),
+          phoneNumber: delivery.pickup?.phone || '',
+        },
+        client: {
+          name: delivery.delivery?.customer_name || '',
+          address: [
+            delivery.delivery?.address,
+            delivery.delivery?.postal_code,
+            delivery.delivery?.city,
+            delivery.delivery?.country
+          ].filter(Boolean).join(', '),
+          phoneNumber: delivery.delivery?.phone || '',
+        },
+        items: (delivery.order?.items || []).map((item: any) =>
+          `${item.quantity}x ${item.item_name}${item.note && item.note !== 'string' ? ` (${item.note})` : ''}`
+        ),
+        pickedUp: delivery.status === 'picked_up',
+        completed: delivery.status === 'delivered',
+        deliveryTime: delivery.estimated_delivery_time,
+        contactlessDelivery: false,
+      };
+      setCurrentOrder(order);
+    }
+
+    // Optionally, handle a dedicated cancellation event if your backend sends one:
+    if (
+      (data.type === 'order_cancelled' || data.type === 'delivery_cancelled') &&
+      data.payload?.delivery_id &&
+      currentOrder &&
+      data.payload.delivery_id.toString() === currentOrder.id
+    ) {
+      setCurrentOrder(null);
+      Alert.alert(
+        "Order Cancelled",
+        "The current order has been cancelled.",
+        [{ text: "OK" }]
+      );
+    }
+
+      } catch (err) {
+        console.log('WebSocket message parse error:', err);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.log('WebSocket error:', err);
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [workerLocation]);
+
+  // Check check-in status on mount (optional, if you want to persist it)
+  useEffect(() => {
+    const fetchCheckInStatus = async () => {
+      const status = await AsyncStorage.getItem('worker_app_checked_in');
+      setIsCheckedIn(status === 'true');
+    };
+    fetchCheckInStatus();
+  }, []);
+
+  // "Start Shift" handler
+  const handleStartShift = async () => {
+    setCheckingIn(true);
+    try {
+      // Send check-in status to backend (adjust endpoint as needed)
+      const token = await AsyncStorage.getItem('worker_app_access_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      await fetch(`${API_BASE}/courier/checkin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ checked_in: true }),
+      });
+      setIsCheckedIn(true);
+      await AsyncStorage.setItem('worker_app_checked_in', 'true');
+      // Optionally notify backend via WebSocket
+      wsRef.current?.send(JSON.stringify({ type: 'checked_in', payload: { checked_in: true } }));
+    } catch (err) {
+      Alert.alert('Error', 'Failed to check in. Try again.');
+    }
+    setCheckingIn(false);
   };
+
+  if (!isCheckedIn) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Ionicons name="log-in-outline" size={80} color={colors.primary} />
+          <Text style={styles.awaitingOrderText}>You are not checked in</Text>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleStartShift}
+            disabled={checkingIn}
+          >
+            {checkingIn ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Ionicons name="play" size={20} color="white" />
+                <Text style={styles.actionButtonText}>Start Shift</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+        <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
+      </ThemedView>
+    );
+  }
 
   if (!currentOrder) {
     return (
@@ -428,8 +688,22 @@ export default function HomeScreen() {
             
             <View style={styles.orderDetailItem}>
               <Text style={styles.orderDetailLabel}>Address:</Text>
-              <TouchableOpacity onPress={() => navigateToMap(currentOrder.client.address, 'client')}>
-                <Text style={[styles.orderDetailValue, styles.phoneLink]}>
+              <TouchableOpacity
+                onPress={() => {
+                  if (currentOrder.pickedUp) {
+                    navigateToMap(currentOrder.client.address, 'client');
+                    sendStatusUpdate(currentOrder.id, 'in_transit');
+                  }
+                }}
+                disabled={!currentOrder.pickedUp}
+              >
+                <Text
+                  style={[
+                    styles.orderDetailValue,
+                    styles.phoneLink,
+                    !currentOrder.pickedUp && { color: colors.text }
+                  ]}
+                >
                   {currentOrder.client.address}
                 </Text>
               </TouchableOpacity>

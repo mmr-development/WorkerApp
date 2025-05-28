@@ -69,7 +69,7 @@ function getClosestPointIndex(user: LatLng, route: LatLng[]) {
 }
 
 export default function MapScreen() {
-  const { address } = useLocalSearchParams();
+  const { address, latitude, longitude } = useLocalSearchParams();
   const router = useRouter();
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const [region, setRegion] = useState<Region | null>(null);
@@ -110,22 +110,32 @@ export default function MapScreen() {
         setUserLocation(start);
         setHeading(location.coords.heading ?? 0);
 
-        // Geocode destination address
-        const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address as string)}`;
-        const geocodeRes = await fetch(geocodeUrl);
-        const geocodeData = await geocodeRes.json();
-        if (
-          !geocodeData.features ||
-          !geocodeData.features[0] ||
-          !geocodeData.features[0].geometry
-        ) {
+        // Use coordinates from params if available, otherwise geocode the address
+        let dest: LatLng | null = null;
+        if (latitude && longitude) {
+          dest = {
+            latitude: parseFloat(latitude as string),
+            longitude: parseFloat(longitude as string),
+          };
+        } else if (address) {
+          const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(address as string)}`;
+          const geocodeRes = await fetch(geocodeUrl);
+          const geocodeData = await geocodeRes.json();
+          if (
+            geocodeData.features &&
+            geocodeData.features[0] &&
+            geocodeData.features[0].geometry
+          ) {
+            const [destLng, destLat] = geocodeData.features[0].geometry.coordinates;
+            dest = { latitude: destLat, longitude: destLng };
+          }
+        }
+        if (!dest) {
           setDestination(null);
           setRouteCoords([]);
           setLoading(false);
           return;
         }
-        const [destLng, destLat] = geocodeData.features[0].geometry.coordinates;
-        const dest: LatLng = { latitude: destLat, longitude: destLng };
         setDestination(dest);
 
         setRegion({
@@ -136,7 +146,7 @@ export default function MapScreen() {
         });
 
         // Fetch route
-        const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${start.longitude},${start.latitude}&end=${destLng},${destLat}`;
+        const routeUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${start.longitude},${start.latitude}&end=${dest.longitude},${dest.latitude}`;
         const routeRes = await fetch(routeUrl);
         const routeData = await routeRes.json();
         if (

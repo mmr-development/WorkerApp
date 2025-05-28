@@ -29,15 +29,6 @@ export default function SettingsScreen() {
   const [confirmPw, setConfirmPw] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
 
-  // Sign up modal state
-  const [signUpVisible, setSignUpVisible] = useState(false);
-  const [signUpLoading, setSignUpLoading] = useState(false);
-  const [signUpFirstName, setSignUpFirstName] = useState('');
-  const [signUpLastName, setSignUpLastName] = useState('');
-  const [signUpEmail, setSignUpEmail] = useState('');
-  const [signUpPhone, setSignUpPhone] = useState('');
-  const [signUpPassword, setSignUpPassword] = useState('');
-
   useEffect(() => {
     loadUserData();
   }, []);
@@ -99,10 +90,15 @@ export default function SettingsScreen() {
             password
           })
         });
+      // Log status and response body
+      const responseText = await response.text();
+      console.log('Sign-in response status:', response.status);
+      console.log('Sign-in response body:', responseText);
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      data = await response.json();
+      data = JSON.parse(responseText);
       setIsLoggedIn(true);
       await saveUserData(data.refresh_token, email);
       await saveTokens(data.access_token, data.refresh_token);
@@ -141,7 +137,6 @@ export default function SettingsScreen() {
         body: JSON.stringify({ refresh_token: refreshToken })
       });
     } catch (error) {
-      // Ignore errors on logout
     }
     setIsLoggedIn(false);
     setEmail('');
@@ -227,45 +222,6 @@ export default function SettingsScreen() {
       Alert.alert('Error', error.message || 'Failed to change password.');
     } finally {
       setPwLoading(false);
-    }
-  };
-
-  // Sign up logic
-  const handleSignUp = async () => {
-    if (!signUpFirstName || !signUpLastName || !signUpEmail || !signUpPhone || !signUpPassword) {
-      Alert.alert('Missing Fields', 'Please fill in all fields.');
-      return;
-    }
-    setSignUpLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/auth/sign-up/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          first_name: signUpFirstName,
-          last_name: signUpLastName,
-          email: signUpEmail,
-          phone_number: signUpPhone,
-          password: signUpPassword
-        })
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Sign up failed');
-      }
-      setSignUpVisible(false);
-      setSignUpFirstName('');
-      setSignUpLastName('');
-      setSignUpEmail('');
-      setSignUpPhone('');
-      setSignUpPassword('');
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to sign up.');
-    } finally {
-      setSignUpLoading(false);
     }
   };
 
@@ -383,95 +339,7 @@ export default function SettingsScreen() {
                     {loading ? "Signing In..." : "Log In"}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.loginButtonSettings, styles.signUpButton]}
-                  onPress={() => setSignUpVisible(true)}
-                >
-                  <Ionicons name="person-add" size={24} color="white" />
-                  <Text style={styles.loginButtonText}>Sign Up</Text>
-                </TouchableOpacity>
               </View>
-              {/* Sign Up Modal */}
-              <Modal
-                visible={signUpVisible}
-                animationType="slide"
-                transparent
-                onRequestClose={() => setSignUpVisible(false)}
-              >
-                <View style={{
-                  flex: 1,
-                  backgroundColor: 'rgba(0,0,0,0.4)',
-                  justifyContent: 'center',
-                  alignItems: 'center'
-                }}>
-                  <View style={{
-                    backgroundColor: 'white',
-                    borderRadius: 12,
-                    padding: 24,
-                    width: '85%',
-                    alignItems: 'center'
-                  }}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Sign Up</Text>
-                    <TextInput
-                      style={styles.inputSettings}
-                      placeholder="First Name"
-                      value={signUpFirstName}
-                      onChangeText={setSignUpFirstName}
-                      autoCapitalize="words"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Last Name"
-                      value={signUpLastName}
-                      onChangeText={setSignUpLastName}
-                      autoCapitalize="words"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Email"
-                      value={signUpEmail}
-                      onChangeText={setSignUpEmail}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Phone Number"
-                      value={signUpPhone}
-                      onChangeText={setSignUpPhone}
-                      keyboardType="phone-pad"
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Password"
-                      value={signUpPassword}
-                      onChangeText={setSignUpPassword}
-                      secureTextEntry
-                      autoCapitalize="none"
-                    />
-                    <View style={{ flexDirection: 'row', marginTop: 16 }}>
-                      <TouchableOpacity
-                        style={[styles.primaryButton, { backgroundColor: "#1976d2" }]}
-                        onPress={handleSignUp}
-                        disabled={signUpLoading}
-                      >
-                        {signUpLoading ? (
-                          <ActivityIndicator color="white" />
-                        ) : (
-                          <Text style={styles.buttonText}>Sign Up</Text>
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.secondaryButton, { marginLeft: 10 }]}
-                        onPress={() => setSignUpVisible(false)}
-                        disabled={signUpLoading}
-                      >
-                        <Text style={styles.buttonText}>Cancel</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </Modal>
             </>
           )}
 
