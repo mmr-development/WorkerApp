@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, Image, Modal, ScrollView, BackHandler, TouchableWithoutFeedback, ActionSheetIOS } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
@@ -7,6 +7,11 @@ import { styles, colors } from '../../styles';
 import * as ImagePicker from 'expo-image-picker';
 import { API_BASE, getAccessToken } from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { connectWebSocket, closeWebSocket } from '@/constants/WebSocketManager';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 type ChatRoom = {
   id: string;
@@ -18,7 +23,16 @@ type Message = {
   text?: string;
   image?: string;
   sender: string;
+  senderUuid?: string; // <-- add this
   timestamp: string;
+  isSender?: boolean; // <-- add this
+};
+
+type Colleague = {
+  id: number;
+  user_uuid: string;
+  first_name: string;
+  last_name: string;
 };
 
 export default function ChatPage() {
@@ -29,17 +43,38 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<{ [roomId: string]: Message[] }>({});
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-
-  // Modal for chat type selection
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [chatTypeModalVisible, setChatTypeModalVisible] = useState(false);
-
-  // Ref for FlatList to scroll to bottom
   const flatListRef = useRef<FlatList>(null);
-
-  // WebSocket ref
-  const wsRef = useRef<WebSocket | null>(null);
+  const [chatModalStep, setChatModalStep] = useState<'selectType' | 'selectColleagues'>('selectType');
 
   const [userId, setUserId] = useState<string | null>(null);
+  const [userUuid, setUserUuid] = useState<string | null>(null);
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  const [selectedColleagues, setSelectedColleagues] = useState<string[]>([]);
+  const [chatType, setChatType] = useState<'support' | 'general' | 'order' | 'delivery'>('general');
+  const [addUserModalVisible, setAddUserModalVisible] = useState(false);
+  const [availableCouriers, setAvailableCouriers] = useState<Colleague[]>([]);
+  const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
+  const [chatMenuVisible, setChatMenuVisible] = useState(false);
+
+  const fetchAvailableCouriers = async () => {
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken || !activeRoom) return;
+      const response = await fetch(`${API_BASE}/v1/couriers/colleagues/`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'accept': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch colleagues');
+      const data = await response.json();
+      setAvailableCouriers(Array.isArray(data.couriers) ? data.couriers : []);
+    } catch (err) {
+      setAvailableCouriers([]);
+    }
+  };
 
   useEffect(() => {
     const fetchUserId = async () => {
@@ -48,13 +83,13 @@ export default function ChatPage() {
         if (userData) {
           const parsed = JSON.parse(userData);
           setUserId(parsed.user_id || null);
+          setUserUuid(parsed.user_uuid || null);
         }
       } catch {}
     };
     fetchUserId();
   }, []);
 
-  // Move fetchChats outside useEffect so you can call it after creating a chat
   const fetchChats = async () => {
     try {
       const accessToken = await getAccessToken();
@@ -72,9 +107,10 @@ export default function ChatPage() {
         throw new Error('Failed to fetch chats');
       }
       const data = await response.json();
-      const rooms: ChatRoom[] = data.chats.map((chat: any) => ({
+      const chatsArray = Array.isArray(data.chats) ? data.chats : [];
+      const rooms: ChatRoom[] = chatsArray.map((chat: any) => ({
         id: String(chat.id),
-        name: `Chat ${chat.id}`,
+        name: `chat (${chat.id})`,
       }));
       setChatRooms(rooms);
     } catch (error: any) {
@@ -82,119 +118,183 @@ export default function ChatPage() {
     }
   };
 
-  useEffect(() => {
-    fetchChats();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchChats();
+    }, [])
+  );
 
-  // Join chat room via WebSocket when activeRoom changes
   useEffect(() => {
     if (!activeRoom) {
-      // Close socket if leaving room
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      closeWebSocket();
       return;
     }
 
-    // Connect to WebSocket server at /ws/chat/{chat_id}
-    const wsUrl = API_BASE.replace(/^http/, 'ws') + `/ws/chat/${activeRoom.id}`;
-    const ws = new WebSocket(wsUrl);
+    let wsInstance: WebSocket | null = null;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        action: 'join',
-        chat_id: Number(activeRoom.id),
-      }));
-    };
+    connectWebSocket(
+      (data: any) => {
+        try {
+          console.log('Received message from WS:', data);
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('Received message from WS:', data);
+if (data.type === 'history' && Array.isArray(data.messages)) {
+  const history: Message[] = data.messages.map((msg: any, idx: number) => ({
+    id:
+  msg.id !== undefined && msg.id !== null
+    ? String(msg.id)
+    : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
+    text: msg.content?.text,
+    image:
+      msg.content?.image ||
+      (Array.isArray(msg.content?.images) && msg.content.images.length > 0
+        ? msg.content.images[0].url
+        : undefined),
+    sender:
+      (msg.sender_id === userUuid || msg.user_uuid === userUuid)
+        ? 'You'
+        : (msg.first_name && msg.last_name
+            ? `${msg.first_name} ${msg.last_name}`
+            : msg.sender_id || msg.user_uuid || 'User'),
+    senderUuid: msg.sender_id || msg.user_uuid,
+    timestamp: msg.created_at,
+    isSender: msg.isSender !== undefined
+      ? msg.isSender
+      : (msg.sender_id === userUuid || msg.user_uuid === userUuid), // <-- add this line
+  }));
+  setMessages((prev) => ({
+    ...prev,
+    [activeRoom.id]: history,
+  }));
+}
 
-        if (data.type === 'history' && Array.isArray(data.messages)) {
-          const history: Message[] = data.messages.map((msg: any, idx: number) => ({
-            id: msg.id !== undefined && msg.id !== null ? String(msg.id) : `history-${msg.created_at || idx}`,
-            text: msg.content?.text, // Access the text field inside content
-            image: msg.content?.image, // Access the image field inside content
-            sender: msg.sender_id || 'User',
-            timestamp: msg.created_at,
-          }));
-          setMessages((prev) => ({
-            ...prev,
-            [activeRoom.id]: history,
-          }));
+          if (data.type === 'message' && data.message) {
+            const msgData = data.message;
+const msg: Message = {
+  id:
+  msgData.id !== undefined && msgData.id !== null
+    ? String(msgData.id)
+    : `msg-${msgData.created_at || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  text: msgData.content?.text,
+  image:
+    msgData.content?.image ||
+    (Array.isArray(msgData.content?.images) && msgData.content.images.length > 0
+      ? msgData.content.images[0].url
+      : undefined),
+  sender:
+    (msgData.sender_id === userUuid || msgData.user_uuid === userUuid)
+      ? 'You'
+      : (msgData.first_name && msgData.last_name
+          ? `${msgData.first_name} ${msgData.lastName}`
+          : msgData.sender_id || msgData.user_uuid || 'User'),
+  senderUuid: msgData.sender_id || msgData.user_uuid,
+  timestamp: msgData.created_at,
+  isSender: msgData.isSender,
+};
+            setMessages((prev) => ({
+              ...prev,
+              [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
+            }));
+          }
+        } catch (err) {
+          console.log('WebSocket message parse error:', err);
         }
+      },
+      () => {},
+      (err) => {
+        console.log('WebSocket error:', err);
+      },
+      activeRoom.id
+    ).then(ws => {
+      wsInstance = ws;
+    });
 
-        if (data.type === 'message' && data.message) {
-          const msgData = data.message;
-          const msg: Message = {
-            id: msgData.id !== undefined && msgData.id !== null ? String(msgData.id) : `msg-${Date.now()}`,
-            text: msgData.content?.text, // Access the text field inside content
-            image: msgData.content?.image, // Access the image field inside content
-            sender: msgData.sender_id || 'User',
-            timestamp: msgData.created_at,
-          };
-          setMessages((prev) => ({
-            ...prev,
-            [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
-          }));
-        }
-      } catch (err) {
-        console.log('WebSocket message parse error:', err);
-      }
-    };
-
-    ws.onerror = (err) => {
-      console.log('WebSocket error:', err);
-    };
-
-    ws.onclose = () => {
-      // Optionally handle close
-    };
-
-    wsRef.current = ws;
-
-    // Cleanup on unmount or room change
     return () => {
-      ws.close();
-      wsRef.current = null;
+      closeWebSocket();
     };
-  }, [activeRoom]);
+  }, [activeRoom, userUuid]);
 
-  // Show modal to choose chat type
-  const createChatRoom = () => {
-    setChatTypeModalVisible(true);
-  };
-
-  // Actually create chat room via API
-  const handleCreateChat = async (type: 'support' | 'private') => {
-    setChatTypeModalVisible(false);
+  const fetchColleagues = async () => {
     try {
       const accessToken = await getAccessToken();
-      console.log('Access Token:', accessToken);
-      if (!accessToken) {
-        Alert.alert('Authorization Error', 'You must be logged in to create a chat.');
-        return;
-      }
-      const response = await fetch(`${API_BASE}/v1/chats/`, {
-        method: 'POST',
+      if (!accessToken) return;
+      const response = await fetch(`${API_BASE}/v1/couriers/colleagues/`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'accept': 'application/json',
         },
       });
+      if (!response.ok) throw new Error('Failed to fetch colleagues');
+      const data = await response.json();
+      setColleagues(Array.isArray(data.couriers) ? data.couriers : []);
+    } catch (err) {
+      setColleagues([]);
+    }
+  };
+
+  const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => {
+    setChatTypeModalVisible(true);
+    if (type === 'general') {
+      setChatType('general');
+      setChatModalStep('selectColleagues');
+      fetchColleagues();
+    } else if (type === 'support') {
+      setChatType('support');
+      setChatModalStep('selectType');
+      handleCreateChat();
+      setChatTypeModalVisible(false);
+    } else {
+      setChatModalStep('selectType');
+    }
+  };
+
+  const toggleColleague = (user_uuid: string) => {
+    setSelectedColleagues((prev) =>
+      prev.includes(user_uuid)
+        ? prev.filter((id) => id !== user_uuid)
+        : [...prev, user_uuid]
+    );
+  };
+
+  const handleCreateChat = async () => {
+    setChatTypeModalVisible(false);
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        Alert.alert('Authorization Error', 'You must be logged in to create a chat.');
+        return;
+      }
+
+      if (chatType === 'general' && selectedColleagues.length === 0) {
+        Alert.alert('Select at least one colleague');
+        return;
+      }
+
+      const participants = selectedColleagues.map(uuid => ({
+        user_id: uuid,
+        user_role: 'courier'
+      }));
+
+      const payload = {
+        type: chatType,
+        participants
+      };
+const response = await fetch(`${API_BASE}/v1/chats/`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'accept': 'application/json',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(payload),
+});
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.log('Chat creation error:', errorData);
         throw new Error(errorData.detail || errorData.message || 'Failed to create chat');
       }
-      // Optionally, you can use the returned chat data if needed
       await response.json();
-
-      // Refresh chat list so the new chat appears immediately
       await fetchChats();
+      setSelectedColleagues([]);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Could not create chat.');
     }
@@ -207,18 +307,13 @@ export default function ChatPage() {
     }
   };
 
-  // Add this function to handle leaving the chat and closing the WebSocket
   const leaveActiveRoom = () => {
-    // Close the WebSocket connection if open
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    closeWebSocket();
     setActiveRoom(null);
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || sending || !wsRef.current || wsRef.current.readyState !== 1) return;
+    if (!input.trim() || sending) return;
     setSending(true);
 
     const accessToken = await getAccessToken();
@@ -228,15 +323,6 @@ export default function ChatPage() {
       return;
     }
 
-    let sender_id = '';
-    try {
-      const userData = await AsyncStorage.getItem('worker_app_user_data');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        sender_id = parsed.user_id || '';
-      }
-    } catch {}
-
     const payload = {
       action: 'message',
       content: {
@@ -244,9 +330,14 @@ export default function ChatPage() {
       },
     };
 
-    console.log('Sending message via WS:', payload); // <-- Log sent message
+    console.log('Sending message via WebSocket:', JSON.stringify(payload));
 
-    wsRef.current.send(JSON.stringify(payload));
+    const ws = require('@/constants/WebSocketManager').getWebSocket();
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify(payload));
+    } else {
+      Alert.alert('WebSocket Error', 'WebSocket is not connected.');
+    }
 
     setInput('');
     setSending(false);
@@ -266,20 +357,29 @@ export default function ChatPage() {
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.5,
-      base64: true,
+      base64: false, // You need a URL, not base64
     });
-    if (!result.canceled && result.assets && result.assets[0].base64) {
-      const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      const msg: Message = {
-        id: Date.now().toString(),
-        image: imageUri,
-        sender: 'You',
-        timestamp: new Date().toISOString(),
+    if (!result.canceled && result.assets && result.assets[0].uri) {
+      const imageUrl = result.assets[0].uri; // This is a local URI; you may need to upload it to get a public URL
+      // If your backend requires a public URL, upload the image first and get the URL
+      const payload = {
+        action: 'message',
+        content: {
+          images: [
+            {
+              url: imageUrl, // Replace with public URL if needed
+              caption: '',   // Optional: add a caption if you want
+            },
+          ],
+        },
       };
-      setMessages(prev => ({
-        ...prev,
-        [activeRoom!.id]: [...(prev[activeRoom!.id] || []), msg],
-      }));
+      console.log('Sending image message via WebSocket:', JSON.stringify(payload));
+      const ws = require('@/constants/WebSocketManager').getWebSocket();
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify(payload));
+      } else {
+        Alert.alert('WebSocket Error', 'WebSocket is not connected.');
+      }
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -293,7 +393,7 @@ export default function ChatPage() {
           <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.chatHeaderTitle}>Chat Rooms</Text>
-        <TouchableOpacity style={styles.chatPlusButton} onPress={createChatRoom}>
+        <TouchableOpacity style={styles.chatPlusButton} onPress={() => createChatRoom()}>
           <Ionicons name="add" size={28} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -312,7 +412,11 @@ export default function ChatPage() {
         visible={chatTypeModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setChatTypeModalVisible(false)}
+        onRequestClose={() => {
+          setChatTypeModalVisible(false);
+          setChatModalStep('selectType');
+          setSelectedColleagues([]);
+        }}
       >
         <View style={{
           flex: 1,
@@ -324,30 +428,90 @@ export default function ChatPage() {
             backgroundColor: 'white',
             borderRadius: 12,
             padding: 24,
-            width: 280,
+            width: 320,
             alignItems: 'center'
           }}>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Create Chat</Text>
-            <TouchableOpacity
-              style={[styles.loginButton, { marginBottom: 10, width: 200 }]}
-              onPress={() => handleCreateChat('support')}
-            >
-              <Ionicons name="help-buoy" size={22} color="white" />
-              <Text style={styles.loginButtonText}>Create Support Ticket</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.loginButton, { width: 200 }]}
-              onPress={() => handleCreateChat('private')}
-            >
-              <Ionicons name="person" size={22} color="white" />
-              <Text style={styles.loginButtonText}>Create Private Chat</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ marginTop: 16 }}
-              onPress={() => setChatTypeModalVisible(false)}
-            >
-              <Text style={{ color: colors.error, fontWeight: 'bold' }}>Cancel</Text>
-            </TouchableOpacity>
+            {chatModalStep === 'selectType' && (
+              <>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Create Chat</Text>
+                <TouchableOpacity
+                  style={[styles.loginButton, { marginBottom: 10, width: 200 }]}
+                  onPress={() => createChatRoom('support')}
+                >
+                  <Ionicons name="help-buoy" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Create Support Ticket</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.loginButton, { width: 200 }]}
+                  onPress={() => {
+                    setChatType('general');
+                    setChatModalStep('selectColleagues');
+                    fetchColleagues();
+                  }}
+                >
+                  <Ionicons name="chatbubbles" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Create General Chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ marginTop: 16 }}
+                  onPress={() => {
+                    setChatTypeModalVisible(false);
+                    setChatModalStep('selectType');
+                    setSelectedColleagues([]);
+                  }}
+                >
+                  <Text style={{ color: colors.error, fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {chatModalStep === 'selectColleagues' && (
+              <>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>Select colleagues:</Text>
+                <ScrollView style={{ maxHeight: 180, width: '100%' }}>
+                  {colleagues.map((col) => (
+                    <TouchableOpacity
+                      key={col.user_uuid}
+                      style={[
+                        styles.participantRow,
+                        selectedColleagues.includes(col.user_uuid) && styles.participantRowSelected,
+                        { width: 200, alignSelf: 'center' } // Match Add to Chat button width
+                      ]}
+                      onPress={() => toggleColleague(col.user_uuid)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={selectedColleagues.includes(col.user_uuid) ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color={selectedColleagues.includes(col.user_uuid) ? 'white' : colors.primary}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={[
+                        styles.participantName,
+                        selectedColleagues.includes(col.user_uuid) && styles.participantNameSelected
+                      ]}>
+                        {col.first_name} {col.last_name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.loginButton, { marginTop: 12, width: 200, backgroundColor: colors.primary }]}
+                  onPress={handleCreateChat}
+                >
+                  <Ionicons name="chatbubble-ellipses" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Create Chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ marginTop: 16 }}
+                  onPress={() => {
+                    setChatModalStep('selectType');
+                    setSelectedColleagues([]);
+                  }}
+                >
+                  <Text style={{ color: colors.error, fontWeight: 'bold' }}>Back</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -366,69 +530,78 @@ export default function ChatPage() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.chatHeaderTitle}>{activeRoom?.name}</Text>
-        <View style={{ width: 40 }} />
+          <TouchableOpacity
+            style={styles.chatPlusButton}
+            onPress={() => setChatMenuVisible(true)}
+          >
+            <Ionicons name="ellipsis-vertical" size={28} color={colors.primary} />
+          </TouchableOpacity>
       </View>
       <FlatList
         ref={flatListRef}
         data={messages[activeRoom!.id] || []}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const isMine = item.sender === userId || item.sender === 'You';
-          return (
-            <View
-              style={[
-                styles.chatMessageRow,
-                isMine ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
-              ]}
-            >
-              <View
-                style={[
-                  styles.chatMessageBubble,
-                  isMine
-                    ? { backgroundColor: colors.primary, alignSelf: 'flex-end' }
-                    : { backgroundColor: colors.backgroundLight, alignSelf: 'flex-start' },
-                ]}
-              >
-                <View style={styles.chatMessageHeader}>
-                  <Text
-                    style={[
-                      styles.chatMessageSender,
-                      isMine ? { color: colors.white } : {},
-                    ]}
-                  >
-                    {isMine ? 'You' : item.sender}:
-                  </Text>
-                  <Text
-                    style={[
-                      styles.chatMessageTimestamp,
-                      isMine ? { color: colors.white } : {},
-                    ]}
-                  >
-                    {item.timestamp
-                      ? new Date(item.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                  </Text>
-                </View>
-                {item.text ? (
-                  <Text
-                    style={[
-                      styles.chatMessageText,
-                      isMine ? { color: colors.white } : {},
-                    ]}
-                  >
-                    {item.text}
-                  </Text>
-                ) : null}
-                {item.image ? (
-                  <Image source={{ uri: item.image }} style={styles.chatMessageImage} />
-                ) : null}
-              </View>
-            </View>
-          );
-        }}
+renderItem={({ item }) => {
+  const isMine = typeof item.isSender === 'boolean'
+    ? item.isSender
+    : item.senderUuid === userUuid;
+  return (
+    <View
+      style={[
+        styles.chatMessageRow,
+        isMine ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
+      ]}
+    >
+      <View
+        style={[
+          styles.chatMessageBubble,
+          isMine
+            ? { backgroundColor: colors.primary, alignSelf: 'flex-end' }
+            : { backgroundColor: colors.backgroundLight, alignSelf: 'flex-start' },
+        ]}
+      >
+        <View style={styles.chatMessageHeader}>
+          <Text
+            style={[
+              styles.chatMessageSender,
+              isMine ? { color: colors.white } : {},
+            ]}
+          >
+            {isMine ? 'You' : item.sender}:
+          </Text>
+          <Text
+            style={[
+              styles.chatMessageTimestamp,
+              isMine ? { color: colors.white } : {},
+            ]}
+          >
+            {item.timestamp
+              ? new Date(item.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : ''}
+          </Text>
+        </View>
+        {item.text ? (
+          <Text
+            style={[
+              styles.chatMessageText,
+              isMine ? { color: colors.white } : {},
+            ]}
+          >
+            {item.text}
+          </Text>
+        ) : null}
+{item.image ? (
+  <TouchableOpacity onPress={() => setEnlargedImage(item.image)}>
+    <Image source={{ uri: item.image }} style={styles.chatMessageImage} />
+  </TouchableOpacity>
+) : null}
+      </View>
+    </View>
+  );
+}}
         contentContainerStyle={{ padding: 12 }}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
@@ -448,9 +621,295 @@ export default function ChatPage() {
           <Ionicons name="send" size={28} color={input.trim() ? colors.primary : colors.text} />
         </TouchableOpacity>
       </View>
+      <Modal
+        visible={addUserModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setAddUserModalVisible(false);
+          setSelectedToAdd([]);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setAddUserModalVisible(false);
+          setSelectedToAdd([]);
+        }}>
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}>
+            <TouchableWithoutFeedback onPress={() => { /* prevent modal close when clicking inside */ }}>
+              <View style={{
+                backgroundColor: 'white',
+                borderRadius: 12,
+                padding: 24,
+                width: 340,
+                alignItems: 'center'
+              }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>Add participants:</Text>
+                <ScrollView style={{ maxHeight: 220, width: '100%' }}>
+                  {availableCouriers.map((col) => {
+                    const selected = selectedToAdd.includes(col.user_uuid);
+                    return (
+                      <TouchableOpacity
+                        key={col.user_uuid}
+                        style={[
+                          styles.participantRow,
+                          selected && styles.participantRowSelected,
+                          { width: 220, alignSelf: 'center' } // Match Add to Chat button width
+                        ]}
+                        onPress={() => setSelectedToAdd(prev =>
+                          prev.includes(col.user_uuid)
+                            ? prev.filter(id => id !== col.user_uuid)
+                            : [...prev, col.user_uuid]
+                        )}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={selected ? 'checkbox' : 'square-outline'}
+                          size={22}
+                          color={selected ? 'white' : colors.primary}
+                          style={{ marginRight: 12 }}
+                        />
+                        <Text style={[
+                          styles.participantName,
+                          selected && styles.participantNameSelected
+                        ]}>
+                          {col.first_name} {col.last_name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.loginButton, { marginTop: 16, width: 220, backgroundColor: colors.primary }]}
+                  onPress={handleAddParticipants}
+                  disabled={selectedToAdd.length === 0}
+                >
+                  <Ionicons name="person-add" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Add to Chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ marginTop: 16 }}
+                  onPress={() => {
+                    setAddUserModalVisible(false);
+                    setSelectedToAdd([]);
+                  }}
+                >
+                  <Text style={{ color: colors.error, fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      <Modal visible={!!enlargedImage} transparent animationType="fade" onRequestClose={() => setEnlargedImage(null)}>
+  <TouchableWithoutFeedback onPress={() => setEnlargedImage(null)}>
+    <View style={{
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      justifyContent: 'center',
+      alignItems: 'center'
+    }}>
+      {enlargedImage && (
+        <Image
+          source={{ uri: enlargedImage }}
+          style={{ width: '90%', height: '70%', resizeMode: 'contain' }}
+        />
+      )}
+    </View>
+  </TouchableWithoutFeedback>
+</Modal>
+      <Modal
+        visible={chatMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChatMenuVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setChatMenuVisible(false)}>
+          <View style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}>
+            <TouchableWithoutFeedback>
+              <View style={{
+                backgroundColor: 'white',
+                borderRadius: 12,
+                padding: 24,
+                width: 240,
+                alignItems: 'center'
+              }}>
+                <TouchableOpacity
+                  style={[styles.loginButton, { width: '100%', marginBottom: 10 }]}
+                  onPress={() => {
+                    setChatMenuVisible(false);
+                    setAddUserModalVisible(true);
+                  }}
+                >
+                  <Ionicons name="person-add" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Add person to chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.loginButton, { width: '100%' }]}
+                  onPress={() => {
+                    setChatMenuVisible(false);
+                    exportChatAsPDF();
+                  }}
+                >
+                  <Ionicons name="download" size={22} color="white" />
+                  <Text style={styles.loginButtonText}>Export chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ marginTop: 16 }}
+                  onPress={() => setChatMenuVisible(false)}
+                >
+                  <Text style={{ color: colors.error, fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </KeyboardAvoidingView>
   );
+
+// Function to add selected participants to the current chat
+const handleAddParticipants = async () => {
+  if (!activeRoom) return;
+  try {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      Alert.alert('Authorization Error', 'You must be logged in to add participants.');
+      return;
+    }
+    const participants = selectedToAdd.map(uuid => ({
+      user_id: uuid,
+      user_role: 'courier'
+    }));
+    const payload = { participants };
+    console.log('Sending to backend:', JSON.stringify(payload));
+    const response = await fetch(`${API_BASE}/v1/chats/${activeRoom.id}/participants`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    let responseBody = null;
+    try {
+      responseBody = await response.json();
+    } catch (e) {
+      responseBody = await response.text();
+    }
+    console.log('Backend response:', response.status, responseBody);
+    if (!response.ok) {
+      throw new Error(
+        (responseBody && (responseBody.detail || responseBody.message)) ||
+        'Failed to add participants'
+      );
+    }
+    setAddUserModalVisible(false);
+    setSelectedToAdd([]);
+    Alert.alert('Success', 'Participants added!');
+  } catch (error: any) {
+    Alert.alert('Error', error.message || 'Could not add participants.');
+  }
+};
+
+  // Handle Android back button to go back to chat list instead of home
+  useEffect(() => {
+    const onBackPress = () => {
+      if (activeRoom) {
+        setActiveRoom(null);
+        return true; // Prevent default behavior (going back to index)
+      }
+      return false; // Allow default behavior
+    };
+
+    BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => {
+      BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+    };
+  }, [activeRoom]);
+
+  // Export chat as PDF (move inside component to access state)
+const exportChatAsPDF = async () => {
+  console.log('Export chat as PDF started');
+  try {
+    const chatMsgs = messages[activeRoom!.id] || [];
+    let html = `<h1>Chat Export</h1>`;
+
+    for (const msg of chatMsgs) {
+      let imageHtml = '';
+      if (msg.image) {
+        if (msg.image.startsWith('file://')) {
+          try {
+            const base64 = await FileSystem.readAsStringAsync(msg.image, { encoding: FileSystem.EncodingType.Base64 });
+            imageHtml = `<br/><img src="data:image/jpeg;base64,${base64}" width="200"/>`;
+          } catch (e) {
+            console.log('Failed to read image for export:', msg.image, e);
+            imageHtml = `<br/><i>[Image could not be exported]</i>`;
+          }
+        } else {
+          imageHtml = `<br/><img src="${msg.image}" width="200"/>`;
+        }
+      }
+      html += `<div><b>${msg.sender}:</b> ${msg.text || ''}${imageHtml}<br/><small>${msg.timestamp}</small></div><hr/>`;
+    }
+    console.log('Generated HTML for PDF:', html);
+
+    // Format date as DD-MM-YYYY (not American, 4-digit year)
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear());
+    const dateStr = `${day}-${month}-${year}`;
+    const chatId = activeRoom?.id || 'chat';
+    const fileName = `ChatExport${chatId}_${dateStr}.pdf`;
+
+    const { uri } = await Print.printToFileAsync({ html });
+    console.log('PDF file generated at URI:', uri);
+
+    if (Platform.OS === 'android') {
+      console.log('Requesting directory permissions for Android');
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      console.log('Directory permissions result:', permissions);
+      if (permissions.granted) {
+        const baseUri = permissions.directoryUri;
+        console.log('Creating file in selected directory:', baseUri, fileName);
+        const newUri = await FileSystem.StorageAccessFramework.createFileAsync(
+          baseUri,
+          fileName,
+          'application/pdf'
+        );
+        console.log('New file URI:', newUri);
+
+        // Read the PDF as a base64 string
+        const pdfBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        // Write the base64 string to the content URI
+        await FileSystem.StorageAccessFramework.writeAsStringAsync(newUri, pdfBase64, { encoding: FileSystem.EncodingType.Base64 });
+        console.log('File written to new URI');
+        Alert.alert('Chat exported', `Chat was exported as "${fileName}" to the selected folder.`);
+        return;
+      }
+    }
+
+    // Fallback: share as before
+    console.log('Sharing PDF file:', uri);
+    await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+  } catch (err: any) {
+    console.log('Export chat as PDF failed:', err);
+    Alert.alert('Export failed', err?.message || 'Could not export chat.');
+  }
+};
 
   return activeRoom ? renderActiveChat() : renderChatRoomList();
 }

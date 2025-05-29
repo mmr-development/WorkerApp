@@ -50,11 +50,12 @@ export default function SettingsScreen() {
     }
   };
 
-  const saveUserData = async (token?: string, emailToRemember?: string) => {
+  const saveUserData = async (token?: string, emailToRemember?: string, userId?: string) => {
     try {
       const dataToSave = {
         isLoggedIn: true,
-        email: emailToRemember || email
+        email: emailToRemember || email,
+        user_id: userId || null,
       };
       await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(dataToSave));
       if (token) {
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
       }
       data = JSON.parse(responseText);
       setIsLoggedIn(true);
-      await saveUserData(data.refresh_token, email);
+      await saveUserData(data.refresh_token, email, data.user_id);
       await saveTokens(data.access_token, data.refresh_token);
       setEmail(email);
       setPassword('');

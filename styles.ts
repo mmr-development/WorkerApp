@@ -1266,7 +1266,7 @@ settingItemWide: {
 },
 chatMessageRow: {
   flexDirection: 'row',
-  alignItems: 'flex-start',
+  alignItems: 'flex-end', // <-- changed from 'flex-start' to 'flex-end' for better vertical alignment
   marginBottom: 12,
   paddingHorizontal: 10,
   paddingVertical: 2,
@@ -1307,5 +1307,33 @@ chatMessageImage: {
   height: 90,
   borderRadius: 8,
   marginTop: 4,
+},
+participantRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  backgroundColor: colors.white,
+  borderRadius: 8,
+  marginBottom: 6,
+  borderWidth: 1,
+  borderColor: colors.lightGrey,
+  shadowColor: colors.black,
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.04,
+  shadowRadius: 2,
+  elevation: 1,
+},
+participantRowSelected: {
+  backgroundColor: colors.primary,
+  borderColor: colors.primary,
+},
+participantName: {
+  fontSize: 16,
+  color: colors.text,
+  fontWeight: '500',
+},
+participantNameSelected: {
+  color: colors.white,
 },
 });

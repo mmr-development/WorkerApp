@@ -1,13 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Text, ScrollView, TouchableOpacity, Animated, Dimensions, View, StyleSheet } from 'react-native';
+import { Text, ScrollView, TouchableOpacity, Animated, Dimensions, View, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { styles, colors } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { OrderDetails } from '@/app/(tabs)/index'; // <-- Add this import
+
 
 const { width } = Dimensions.get('window');
 const SIDEBAR_WIDTH = width * 0.7;
 const SHIFT_STATUS_KEY = 'worker_app_shift_status';
+const CHECKED_IN_KEY = 'worker_app_checked_in'; // Add this
 
 type SidebarProps = {
   isVisible: boolean;
@@ -17,10 +20,13 @@ type SidebarProps = {
 export function Sidebar({ isVisible, onClose }: SidebarProps) {
   const slideAnim = useRef(new Animated.Value(isVisible ? 0 : -SIDEBAR_WIDTH)).current;
   const [shiftActive, setShiftActive] = useState(false);
+  const [isCheckedIn, setIsCheckedIn] = useState(false); // Add checked-in state
+  const [currentOrder, setCurrentOrder] = useState<OrderDetails | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     loadShiftStatus();
+    loadCheckedInStatus();
   }, []);
 
   useEffect(() => {
@@ -31,6 +37,25 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
       useNativeDriver: true,
     }).start();
   }, [isVisible, slideAnim]);
+
+  // Listen for checked-in status changes (poll every second)
+  useEffect(() => {
+    const interval = setInterval(loadCheckedInStatus, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Listen for currentOrder from AsyncStorage (optional, or pass as prop from HomeScreen)
+  useEffect(() => {
+    const fetchCurrentOrder = async () => {
+      try {
+        const orderString = await AsyncStorage.getItem('worker_app_current_order');
+        setCurrentOrder(orderString ? JSON.parse(orderString) : null);
+      } catch (e) {}
+    };
+    fetchCurrentOrder();
+    const interval = setInterval(fetchCurrentOrder, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadShiftStatus = async () => {
     try {
@@ -43,14 +68,52 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
     }
   };
 
+  const loadCheckedInStatus = async () => {
+    try {
+      const checkedIn = await AsyncStorage.getItem(CHECKED_IN_KEY);
+      setIsCheckedIn(checkedIn === 'true');
+      // console.log('[Sidebar] Checked in status:', checkedIn === 'true');
+    } catch (error) {
+      console.error('Error loading checked-in status:', error);
+    }
+  };
+
   const toggleShift = async () => {
     const newStatus = !shiftActive;
     setShiftActive(newStatus);
     try {
       await AsyncStorage.setItem(SHIFT_STATUS_KEY, newStatus.toString());
+      await AsyncStorage.setItem(CHECKED_IN_KEY, newStatus ? 'true' : 'false');
+      setIsCheckedIn(newStatus);
+      console.log('[Sidebar] Toggled shift. Checked in:', newStatus);
     } catch (error) {
       console.error('Error saving shift status:', error);
     }
+  };
+
+  const tryEndShift = async () => {
+    // If there is an active order, warn the user but allow them to proceed
+    if (currentOrder) {
+      Alert.alert(
+        "Active Order",
+        "You have an active order. Are you sure you want to end your shift? This will remove the order.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "End Shift",
+            style: "destructive",
+            onPress: async () => {
+              // Remove order from AsyncStorage
+              await AsyncStorage.removeItem('worker_app_current_order');
+              setCurrentOrder(null);
+              await toggleShift();
+            }
+          }
+        ]
+      );
+      return;
+    }
+    await toggleShift();
   };
 
   const handlePageNavigation = (path: string) => {
@@ -117,13 +180,19 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
           </TouchableOpacity>
         </ScrollView>
 
+        {/* Show checked-in status */}
+        <View style={{ alignItems: 'center', marginBottom: 10 }}>
+          <Text style={{ color: isCheckedIn ? '#2cb673' : '#e53935', fontWeight: 'bold', fontSize: 16 }}>
+          </Text>
+        </View>
+
         <View style={localStyles.shiftButtonContainer}>
           <TouchableOpacity
             style={[
               localStyles.shiftButton,
               { backgroundColor: shiftActive ? '#e53935' : '#2cb673' }
             ]}
-            onPress={toggleShift} // Do not collapse the sidebar when toggling the shift
+            onPress={shiftActive ? tryEndShift : toggleShift}
           >
             <Ionicons 
               name={shiftActive ? "stop-circle" : "play-circle"} 

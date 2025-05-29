@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import { styles, colors } from '../../styles';
+import { sendLocationUpdate } from '@/constants/WebSocketManager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 
@@ -90,6 +92,16 @@ export default function MapScreen() {
   const [pullStartY, setPullStartY] = useState(0);
   const mapRef = useRef<MapView>(null);
   const [closestPoint, setClosestPoint] = useState<LatLng | null>(null);
+  const [locationIntervalActive, setLocationIntervalActive] = useState(false);
+  const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // When map screen is focused, set a flag in AsyncStorage
+  useEffect(() => {
+    AsyncStorage.setItem('worker_app_on_map', 'true');
+    return () => {
+      AsyncStorage.setItem('worker_app_on_map', 'false');
+    };
+  }, []);
 
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
@@ -110,7 +122,7 @@ export default function MapScreen() {
         setUserLocation(start);
         setHeading(location.coords.heading ?? 0);
 
-        // Use coordinates from params if available, otherwise geocode the address
+        // Use coordinates from params if available, otherwise skip destination/route if not present
         let dest: LatLng | null = null;
         if (latitude && longitude) {
           dest = {
@@ -131,8 +143,15 @@ export default function MapScreen() {
           }
         }
         if (!dest) {
+          // No destination provided, just show user location and region
           setDestination(null);
           setRouteCoords([]);
+          setRegion({
+            latitude: start.latitude,
+            longitude: start.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
           setLoading(false);
           return;
         }
@@ -196,6 +215,7 @@ export default function MapScreen() {
           }
         );
       } catch (error: any) {
+        setLoading(false);
         Alert.alert('Error', error.message || 'Failed to fetch route');
       } finally {
         setLoading(false);
@@ -250,11 +270,11 @@ export default function MapScreen() {
         closest = closestMicro;
       }
       setClosestPoint(closest);
-      console.log(
+/*       console.log(
         `Distance to nearest coordinate: ${minDistCoords.toFixed(2)} meters, ` +
         `to nearest micropoint: ${minDistMicropoints.toFixed(2)} meters, ` +
         `closest: ${minDist.toFixed(2)} meters`
-      );
+      ); */
 
       if (minDist > 10) {
         if (oldUserLocation && getDistance(oldUserLocation, userLocation) > 10) {
@@ -321,6 +341,55 @@ export default function MapScreen() {
       setRefreshing(false);
     }
   };
+
+  // Start/stop sending location_update every 30s if in_transit and on map
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkAndStartInterval() {
+      const [inTransit, onMap, currentOrder] = await Promise.all([
+        AsyncStorage.getItem('worker_app_in_transit'),
+        AsyncStorage.getItem('worker_app_on_map'),
+        AsyncStorage.getItem('worker_app_current_order'),
+      ]);
+      // Only send location if inTransit, onMap, and there is a current order
+      if (inTransit === 'true' && onMap === 'true' && currentOrder && !locationIntervalActive) {
+        setLocationIntervalActive(true);
+      } else if ((inTransit !== 'true' || onMap !== 'true' || !currentOrder) && locationIntervalActive) {
+        setLocationIntervalActive(false);
+      }
+    }
+
+    checkAndStartInterval();
+    const checkInterval = setInterval(checkAndStartInterval, 5000);
+
+    return () => {
+      clearInterval(checkInterval);
+    };
+  }, [locationIntervalActive]);
+
+  useEffect(() => {
+    if (locationIntervalActive && userLocation) {
+      // Start sending location_update every 30s
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = setInterval(() => {
+        sendLocationUpdate(userLocation);
+      }, 30000);
+      // Send immediately as well
+      sendLocationUpdate(userLocation);
+    } else {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    };
+  }, [locationIntervalActive, userLocation]);
 
   if (loading || !region) {
     return (
