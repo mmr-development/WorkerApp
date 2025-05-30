@@ -128,18 +128,20 @@ export function closeWebSocket() {
   }
 }
 
-export function sendStatusUpdate(deliveryId: string, newStatus: string, photoBase64?: string) {
+export function sendStatusUpdate(
+  deliveryId: string | number,
+  newStatus: string
+) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    const payload: any = {
+    const payload = {
       type: 'status_update',
-      delivery_id: deliveryId,
+      delivery_id: deliveryId, // <-- delivery_id, not order_id, not inside payload
       status: newStatus,
     };
-    if (photoBase64) {
-      payload.photo = photoBase64;
-    }
     console.log('[WebSocketManager] Sending status_update:', payload);
     ws.send(JSON.stringify(payload));
+  } else {
+    console.log('[WebSocketManager] WebSocket not open, cannot send status_update');
   }
 }
 

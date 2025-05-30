@@ -7,6 +7,8 @@ import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import { API_BASE, clearTokens, saveTokens } from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 
 const USER_DATA_KEY = 'worker_app_user_data';
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
@@ -71,6 +73,34 @@ export default function SettingsScreen() {
     setNotifications(prev => !prev);
   };
 
+  const sendPushToken = async () => {
+    try {
+      let token = null;
+      if (Device.isDevice) {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus === 'granted') {
+          const expoPushToken = await Notifications.getExpoPushTokenAsync({
+            projectId: "8d1efc4a-d923-42cd-a6f5-b3be91938c46"
+          });
+          token = expoPushToken.data;
+          console.log('Expo push notification token:', token);
+          await fetch(`${API_BASE}/v1/users/push-token/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, app_type: 'courier' }),
+          });
+        }
+      }
+    } catch (e) {
+      console.log('Push token error:', e);
+    }
+  };
+
   const handleSignIn = async () => {
     if (!email || !password) {
       Alert.alert('Missing Fields', 'Please enter both email and password.');
@@ -105,6 +135,7 @@ export default function SettingsScreen() {
       await saveTokens(data.access_token, data.refresh_token);
       setEmail(email);
       setPassword('');
+      await sendPushToken(); // <-- Register push token after login
     } catch (error) {
       let message = 'Sign-in Failed. Please check your credentials and try again.';
       if (

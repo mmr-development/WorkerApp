@@ -23,3 +23,12 @@ export async function getRefreshToken(): Promise<string | null> {
 export async function clearTokens() {
   await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
 }
+
+export function getPublicImageUrl(path: string) {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  if (path.startsWith('/uploads')) {
+    return `https://546f-185-19-132-69.ngrok-free.app/public${path}`;
+  }
+  return path;
+}

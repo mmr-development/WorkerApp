@@ -347,15 +347,21 @@ export default function MapScreen() {
     let isMounted = true;
 
     async function checkAndStartInterval() {
-      const [inTransit, onMap, currentOrder] = await Promise.all([
+      const [inTransit, onMap, currentOrderString] = await Promise.all([
         AsyncStorage.getItem('worker_app_in_transit'),
         AsyncStorage.getItem('worker_app_on_map'),
         AsyncStorage.getItem('worker_app_current_order'),
       ]);
-      // Only send location if inTransit, onMap, and there is a current order
-      if (inTransit === 'true' && onMap === 'true' && currentOrder && !locationIntervalActive) {
+      let currentOrder = null;
+      try {
+        currentOrder = currentOrderString ? JSON.parse(currentOrderString) : null;
+      } catch {}
+      console.log('[MapScreen] inTransit:', inTransit, 'onMap:', onMap, 'currentOrder:', currentOrder);
+
+      // Only send location if inTransit, onMap, and there is a valid current order
+      if (inTransit === 'true' && onMap === 'true' && currentOrder && currentOrder.id && !locationIntervalActive) {
         setLocationIntervalActive(true);
-      } else if ((inTransit !== 'true' || onMap !== 'true' || !currentOrder) && locationIntervalActive) {
+      } else if ((inTransit !== 'true' || onMap !== 'true' || !currentOrder || !currentOrder.id) && locationIntervalActive) {
         setLocationIntervalActive(false);
       }
     }

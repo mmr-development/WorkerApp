@@ -49,7 +49,9 @@
     "react-native-webview": "13.12.5",
     "expo-print": "~14.0.3",
     "expo-sharing": "~13.0.1",
-    "expo-file-system": "~18.0.12"
+    "expo-file-system": "~18.0.12",
+    "expo-device": "~7.0.3",
+    "expo-notifications": "~0.29.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

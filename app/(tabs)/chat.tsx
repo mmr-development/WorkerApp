@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import { styles, colors } from '../../styles';
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE, getAccessToken } from '@/constants/API';
+import { API_BASE, getAccessToken, getPublicImageUrl } from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { connectWebSocket, closeWebSocket } from '@/constants/WebSocketManager';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,6 +16,7 @@ import * as Sharing from 'expo-sharing';
 type ChatRoom = {
   id: string;
   name: string;
+  type?: 'support' | 'general' | 'order' | 'delivery'; // Add this line
 };
 
 type Message = {
@@ -98,7 +99,8 @@ export default function ChatPage() {
         return;
       }
       const response = await fetch(`${API_BASE}/v1/chats/`, {
-        headers: {
+        headers:
+         {
           'Authorization': `Bearer ${accessToken}`,
           'accept': '*/*',
         },
@@ -110,8 +112,14 @@ export default function ChatPage() {
       const chatsArray = Array.isArray(data.chats) ? data.chats : [];
       const rooms: ChatRoom[] = chatsArray.map((chat: any) => ({
         id: String(chat.id),
-        name: `chat (${chat.id})`,
-      }));
+        type: chat.type || (chat.is_support ? 'support' : 'general'),
+        name:
+          (chat.type === 'support' || chat.is_support
+            ? 'Support Chat'
+            : 'General Chat') + ` (${chat.id})`,
+      }))
+      // Sort by id descending (highest first)
+      .sort((a: ChatRoom, b: ChatRoom) => Number(b.id) - Number(a.id));
       setChatRooms(rooms);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Could not load chats.');
@@ -138,28 +146,35 @@ export default function ChatPage() {
           console.log('Received message from WS:', data);
 
 if (data.type === 'history' && Array.isArray(data.messages)) {
+  // Log the image fields for each message in history
+  data.messages.forEach((msg: any, idx: number) => {
+    console.log(
+      `History message[${idx}] image:`,
+      msg.content?.image,
+      msg.content?.images
+    );
+  });
+
   const history: Message[] = data.messages.map((msg: any, idx: number) => ({
-    id:
-  msg.id !== undefined && msg.id !== null
-    ? String(msg.id)
-    : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
+    id: msg.id !== undefined && msg.id !== null
+      ? String(msg.id)
+      : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
     text: msg.content?.text,
     image:
-      msg.content?.image ||
-      (Array.isArray(msg.content?.images) && msg.content.images.length > 0
+      Array.isArray(msg.content?.images) && msg.content.images.length > 0
         ? msg.content.images[0].url
-        : undefined),
+        : msg.content?.image,
     sender:
       (msg.sender_id === userUuid || msg.user_uuid === userUuid)
         ? 'You'
         : (msg.first_name && msg.last_name
-            ? `${msg.first_name} ${msg.last_name}`
+            ? `${msg.first_name} ${msg.lastName}`
             : msg.sender_id || msg.user_uuid || 'User'),
     senderUuid: msg.sender_id || msg.user_uuid,
     timestamp: msg.created_at,
     isSender: msg.isSender !== undefined
       ? msg.isSender
-      : (msg.sender_id === userUuid || msg.user_uuid === userUuid), // <-- add this line
+      : (msg.sender_id === userUuid || msg.user_uuid === userUuid),
   }));
   setMessages((prev) => ({
     ...prev,
@@ -167,34 +182,37 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
   }));
 }
 
-          if (data.type === 'message' && data.message) {
-            const msgData = data.message;
-const msg: Message = {
-  id:
-  msgData.id !== undefined && msgData.id !== null
-    ? String(msgData.id)
-    : `msg-${msgData.created_at || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-  text: msgData.content?.text,
-  image:
-    msgData.content?.image ||
-    (Array.isArray(msgData.content?.images) && msgData.content.images.length > 0
-      ? msgData.content.images[0].url
-      : undefined),
-  sender:
-    (msgData.sender_id === userUuid || msgData.user_uuid === userUuid)
-      ? 'You'
-      : (msgData.first_name && msgData.last_name
-          ? `${msgData.first_name} ${msgData.lastName}`
-          : msgData.sender_id || msgData.user_uuid || 'User'),
-  senderUuid: msgData.sender_id || msgData.user_uuid,
-  timestamp: msgData.created_at,
-  isSender: msgData.isSender,
-};
-            setMessages((prev) => ({
-              ...prev,
-              [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
-            }));
-          }
+if (data.type === 'message' && data.message) {
+  const msgData = data.message;
+  // Log the image field received from backend
+  console.log('Received image in message:', msgData.content?.image, msgData.content?.images);
+
+  const msg: Message = {
+    id:
+      msgData.id !== undefined && msgData.id !== null
+        ? String(msgData.id)
+        : `msg-${msgData.created_at || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    text: msgData.content?.text,
+    image:
+      msgData.content?.image ||
+      (Array.isArray(msgData.content?.images) && msgData.content.images.length > 0
+        ? msgData.content.images[0].url
+        : undefined),
+    sender:
+      (msgData.sender_id === userUuid || msgData.user_uuid === userUuid)
+        ? 'You'
+        : (msgData.first_name && msgData.last_name
+            ? `${msgData.first_name} ${msgData.lastName}`
+            : msgData.sender_id || msgData.user_uuid || 'User'),
+    senderUuid: msgData.sender_id || msgData.user_uuid,
+    timestamp: msgData.created_at,
+    isSender: msgData.isSender,
+  };
+  setMessages((prev) => ({
+    ...prev,
+    [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
+  }));
+}
         } catch (err) {
           console.log('WebSocket message parse error:', err);
         }
@@ -231,31 +249,8 @@ const msg: Message = {
     }
   };
 
-  const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => {
-    setChatTypeModalVisible(true);
-    if (type === 'general') {
-      setChatType('general');
-      setChatModalStep('selectColleagues');
-      fetchColleagues();
-    } else if (type === 'support') {
-      setChatType('support');
-      setChatModalStep('selectType');
-      handleCreateChat();
-      setChatTypeModalVisible(false);
-    } else {
-      setChatModalStep('selectType');
-    }
-  };
-
-  const toggleColleague = (user_uuid: string) => {
-    setSelectedColleagues((prev) =>
-      prev.includes(user_uuid)
-        ? prev.filter((id) => id !== user_uuid)
-        : [...prev, user_uuid]
-    );
-  };
-
-  const handleCreateChat = async () => {
+  // Change handleCreateChat to accept a type
+  const handleCreateChat = async (typeOverride?: 'support' | 'general' | 'order' | 'delivery') => {
     setChatTypeModalVisible(false);
     try {
       const accessToken = await getAccessToken();
@@ -264,35 +259,61 @@ const msg: Message = {
         return;
       }
 
-      if (chatType === 'general' && selectedColleagues.length === 0) {
+      // Use the override if provided, otherwise fall back to state
+      const type = typeOverride || chatType;
+
+      // Only require colleagues for general chat, not support chat
+      if (type === 'general' && selectedColleagues.length === 0) {
         Alert.alert('Select at least one colleague');
         return;
       }
 
-      const participants = selectedColleagues.map(uuid => ({
-        user_id: uuid,
-        user_role: 'courier'
-      }));
+      let endpoint = `${API_BASE}/v1/chats/`;
+      let payload: any = {};
 
-      const payload = {
-        type: chatType,
-        participants
-      };
-const response = await fetch(`${API_BASE}/v1/chats/`, {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${accessToken}`,
-    'accept': 'application/json',
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify(payload),
-});
+      if (type === 'support') {
+        endpoint = `${API_BASE}/v1/chats/support/`;
+        payload = {};
+      } else {
+        payload = {
+          type: type,
+          participants: selectedColleagues.map(uuid => ({
+            user_id: uuid,
+            user_role: 'courier'
+          }))
+        };
+      }
+
+      // Log what is being sent
+      console.log('Creating chat. Endpoint:', endpoint);
+      console.log('Payload:', payload);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers:
+         {
+          'Authorization': `Bearer ${accessToken}`,
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // Log what is received
+      let responseBody = null;
+      try {
+        responseBody = await response.json();
+      } catch (e) {
+        responseBody = await response.text();
+      }
+      console.log('Create chat response:', response.status, responseBody);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || errorData.message || 'Failed to create chat');
+        throw new Error(
+          (responseBody && (responseBody.detail || responseBody.message)) ||
+          'Failed to create chat'
+        );
       }
-      await response.json();
       await fetchChats();
       setSelectedColleagues([]);
     } catch (error: any) {
@@ -357,18 +378,29 @@ const response = await fetch(`${API_BASE}/v1/chats/`, {
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.5,
-      base64: false, // You need a URL, not base64
+      base64: false,
     });
     if (!result.canceled && result.assets && result.assets[0].uri) {
-      const imageUrl = result.assets[0].uri; // This is a local URI; you may need to upload it to get a public URL
-      // If your backend requires a public URL, upload the image first and get the URL
+      const imageUri = result.assets[0].uri;
+      const filename = imageUri.split('/').pop() || 'image.jpg';
+
+      const uploadResult = await uploadImage(imageUri, filename);
+      console.log('Upload image endpoint returned:', uploadResult);
+
+      // Only send if backend returned a valid URL
+      const uploadedUrl = uploadResult?.images?.[0]?.url;
+      if (!uploadedUrl) {
+        Alert.alert('Upload failed', 'Could not upload image. Please try again.');
+        return;
+      }
+      console.log('Sending image URL:', uploadedUrl);
+
       const payload = {
         action: 'message',
         content: {
           images: [
             {
-              url: imageUrl, // Replace with public URL if needed
-              caption: '',   // Optional: add a caption if you want
+              url: uploadedUrl,
             },
           ],
         },
@@ -384,6 +416,35 @@ const response = await fetch(`${API_BASE}/v1/chats/`, {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
+  };
+
+  const uploadImage = async (imageUri: string, filename: string) => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      Alert.alert('Authorization Error', 'You must be logged in to upload images.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('images', {
+      uri: imageUri,
+      name: filename,
+      type: 'image/jpeg', // or 'image/png', etc. You can detect this from the file extension if needed
+    } as any);
+
+    const response = await fetch(`${API_BASE}/v1/chats/upload-images/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'accept': 'application/json',
+        'Content-Type': 'multipart/form-data',
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    console.log('Upload image endpoint returned:', data); // <-- Add this line
+    return data;
   };
 
   const renderChatRoomList = () => (
@@ -496,7 +557,7 @@ const response = await fetch(`${API_BASE}/v1/chats/`, {
                 </ScrollView>
                 <TouchableOpacity
                   style={[styles.loginButton, { marginTop: 12, width: 200, backgroundColor: colors.primary }]}
-                  onPress={handleCreateChat}
+                  onPress={() => handleCreateChat('general')}
                 >
                   <Ionicons name="chatbubble-ellipses" size={22} color="white" />
                   <Text style={styles.loginButtonText}>Create Chat</Text>
@@ -593,11 +654,14 @@ renderItem={({ item }) => {
             {item.text}
           </Text>
         ) : null}
-{item.image ? (
-  <TouchableOpacity onPress={() => setEnlargedImage(item.image)}>
-    <Image source={{ uri: item.image }} style={styles.chatMessageImage} />
-  </TouchableOpacity>
-) : null}
+        {item.image ? (
+          <TouchableOpacity onPress={() => setEnlargedImage(getPublicImageUrl(item.image))}>
+            <Image
+              source={{ uri: getPublicImageUrl(item.image) }}
+              style={styles.chatMessageImage}
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -909,6 +973,32 @@ const exportChatAsPDF = async () => {
     console.log('Export chat as PDF failed:', err);
     Alert.alert('Export failed', err?.message || 'Could not export chat.');
   }
+};
+
+// Add this inside ChatPage, above return
+const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => {
+  setChatTypeModalVisible(true);
+  if (type === 'general') {
+    setChatType('general');
+    setChatModalStep('selectColleagues');
+    fetchColleagues();
+  } else if (type === 'support') {
+    setChatType('support');
+    setChatModalStep('selectType');
+    handleCreateChat('support'); // Pass type here!
+    setChatTypeModalVisible(false);
+  } else {
+    setChatModalStep('selectType');
+  }
+};
+
+// Toggle colleague selection for general chat
+const toggleColleague = (uuid: string) => {
+  setSelectedColleagues(prev =>
+    prev.includes(uuid)
+      ? prev.filter(id => id !== uuid)
+      : [...prev, uuid]
+  );
 };
 
   return activeRoom ? renderActiveChat() : renderChatRoomList();

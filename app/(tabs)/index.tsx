@@ -33,6 +33,7 @@ export type OrderDetails = {
   tipAmount?: number;
   deliveryPhoto?: string;
   contactlessDelivery?: boolean;
+  status?: string; // <--- Add this line
 };
 
 // Add storage key for history
@@ -124,27 +125,6 @@ export default function HomeScreen() {
     return null;
   }, []);
 
-const sendStatusUpdate = async (deliveryId: string, newStatus: string, photoBase64?: string) => {
-  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-    const payload: any = {
-      type: 'status_update',
-      delivery_id: deliveryId,
-      status: newStatus,
-    };
-    if (photoBase64) {
-      payload.photo = photoBase64;
-    }
-    wsRef.current.send(JSON.stringify(payload));
-    // If status is in_transit, set flag in AsyncStorage
-    if (newStatus === 'in_transit') {
-      await AsyncStorage.setItem('worker_app_in_transit', 'true');
-    }
-    // If status is delivered or canceled, clear the flag
-    if (newStatus === 'delivered' || newStatus === 'canceled') {
-      await AsyncStorage.setItem('worker_app_in_transit', 'false');
-    }
-  }
-};
   // Update distances when locations change
   useEffect(() => {
     const updateDistances = async () => {
@@ -206,19 +186,14 @@ const sendStatusUpdate = async (deliveryId: string, newStatus: string, photoBase
 
 const confirmPickup = () => {
   if (currentOrder) {
-    setCurrentOrder({
-      ...currentOrder,
-      pickedUp: true
-    });
+    console.log('[HomeScreen] Confirm Pickup pressed for delivery:', currentOrder.id);
     sendStatusUpdate(currentOrder.id, 'picked_up');
-    // Immediately send location update after pickup
     if (workerLocation) {
       sendLocationUpdate(workerLocation);
       AsyncStorage.setItem('worker_app_in_transit', 'true');
     }
   }
 };
-
   const confirmDelivery = async () => {
     if (!currentOrder) return;
 
@@ -270,7 +245,7 @@ const confirmPickup = () => {
       }
 
       // Send status update via WebSocket (with photo if contactless)
-      sendStatusUpdate(currentOrder.id, 'delivered', photoBase64);
+      sendStatusUpdate(currentOrder.id, 'delivered');
 
       // Save to history and clear current order
       const completedOrder: OrderDetails = {
@@ -537,11 +512,9 @@ useEffect(() => {
                 onPress={async () => {
                   if (currentOrder.pickedUp) {
                     await AsyncStorage.setItem('worker_app_in_transit', 'true');
+                    // Send status update to in_transit
+                    sendStatusUpdate(currentOrder.id, 'in_transit');
                     navigateToMap(currentOrder.client.address, 'client');
-                    // Only send if not already in transit
-                    if (!currentOrder.completed && !currentOrder.pickedUp) {
-                      sendStatusUpdate(currentOrder.id, 'in_transit');
-                    }
                     if (workerLocation) {
                       console.log('[HomeScreen] initial location:', workerLocation);
                       sendLocationUpdate(workerLocation);
@@ -650,17 +623,20 @@ useEffect(() => {
       deliveryTime: delivery.delivered_at,
       tipAmount: delivery.order?.tip_amount,
       contactlessDelivery: false, // Set based on your logic or backend
+      status: delivery.status, // <--- Add this line
     };
   }
 
   function onMessageHandler(data: any) {
-    console.log('[HomeScreen] WebSocket message:', data);
+    console.log('[HomeScreen] WebSocket message received:', data);
 
     if (data.type === 'order_assigned' && data.payload) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload));
+      console.log('[HomeScreen] Updated currentOrder from order_assigned:', data.payload);
     }
     if (data.type === 'current_deliveries' && data.payload?.deliveries?.length > 0) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
+      console.log('[HomeScreen] Updated currentOrder from current_deliveries:', data.payload.deliveries[0]);
     }
   }
 }
