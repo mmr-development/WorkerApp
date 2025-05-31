@@ -1,4 +1,4 @@
-export const API_BASE = 'https://546f-185-19-132-69.ngrok-free.app';
+export const API_BASE = 'https://3a30-77-241-136-45.ngrok-free.app';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -28,7 +28,23 @@ export function getPublicImageUrl(path: string) {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   if (path.startsWith('/uploads')) {
-    return `https://546f-185-19-132-69.ngrok-free.app/public${path}`;
+    return `https://3a30-77-241-136-45.ngrok-free.app/public${path}`;
   }
   return path;
+}
+
+export async function refreshAccessToken() {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) throw new Error('No refresh token found');
+  const response = await fetch(`${API_BASE}/v1/auth/refresh-token/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const data = await response.json();
+  console.log('[API] Refresh token response:', data);
+  if (data.access_token && data.refresh_token) {
+    await saveTokens(data.access_token, data.refresh_token);
+  }
+  return data;
 }

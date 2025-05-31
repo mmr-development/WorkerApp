@@ -16,7 +16,7 @@ import * as Sharing from 'expo-sharing';
 type ChatRoom = {
   id: string;
   name: string;
-  type?: 'support' | 'general' | 'order' | 'delivery'; // Add this line
+  type?: 'support' | 'general' | 'order' | 'delivery';
 };
 
 type Message = {
@@ -26,7 +26,7 @@ type Message = {
   sender: string;
   senderUuid?: string; // <-- add this
   timestamp: string;
-  isSender?: boolean; // <-- add this
+  isSender?: boolean;
 };
 
 type Colleague = {
@@ -153,66 +153,66 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
       msg.content?.image,
       msg.content?.images
     );
-  });
+      });
 
-  const history: Message[] = data.messages.map((msg: any, idx: number) => ({
-    id: msg.id !== undefined && msg.id !== null
-      ? String(msg.id)
-      : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
-    text: msg.content?.text,
-    image:
-      Array.isArray(msg.content?.images) && msg.content.images.length > 0
-        ? msg.content.images[0].url
-        : msg.content?.image,
-    sender:
-      (msg.sender_id === userUuid || msg.user_uuid === userUuid)
-        ? 'You'
-        : (msg.first_name && msg.last_name
-            ? `${msg.first_name} ${msg.lastName}`
-            : msg.sender_id || msg.user_uuid || 'User'),
-    senderUuid: msg.sender_id || msg.user_uuid,
-    timestamp: msg.created_at,
-    isSender: msg.isSender !== undefined
-      ? msg.isSender
-      : (msg.sender_id === userUuid || msg.user_uuid === userUuid),
-  }));
-  setMessages((prev) => ({
-    ...prev,
-    [activeRoom.id]: history,
-  }));
-}
+      const history: Message[] = data.messages.map((msg: any, idx: number) => ({
+        id: msg.id !== undefined && msg.id !== null
+          ? String(msg.id)
+          : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
+        text: msg.content?.text,
+        image:
+          Array.isArray(msg.content?.images) && msg.content.images.length > 0
+            ? msg.content.images[0].url
+            : msg.content?.image,
+        sender:
+          (msg.sender_id === userUuid || msg.user_uuid === userUuid)
+            ? 'You'
+            : (msg.first_name && msg.last_name
+                ? `${msg.first_name} ${msg.lastName}`
+                : msg.sender_id || msg.user_uuid || 'User'),
+        senderUuid: msg.sender_id || msg.user_uuid,
+        timestamp: msg.created_at,
+        isSender: msg.isSender !== undefined
+          ? msg.isSender
+          : (msg.sender_id === userUuid || msg.user_uuid === userUuid),
+      }));
+      setMessages((prev) => ({
+        ...prev,
+        [activeRoom.id]: history,
+      }));
+    }
 
-if (data.type === 'message' && data.message) {
-  const msgData = data.message;
-  // Log the image field received from backend
-  console.log('Received image in message:', msgData.content?.image, msgData.content?.images);
+          if (data.type === 'message' && data.message) {
+            const msgData = data.message;
+            // Log the image field received from backend
+            console.log('Received image in message:', msgData.content?.image, msgData.content?.images);
 
-  const msg: Message = {
-    id:
-      msgData.id !== undefined && msgData.id !== null
-        ? String(msgData.id)
-        : `msg-${msgData.created_at || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    text: msgData.content?.text,
-    image:
-      msgData.content?.image ||
-      (Array.isArray(msgData.content?.images) && msgData.content.images.length > 0
-        ? msgData.content.images[0].url
-        : undefined),
-    sender:
-      (msgData.sender_id === userUuid || msgData.user_uuid === userUuid)
-        ? 'You'
-        : (msgData.first_name && msgData.last_name
-            ? `${msgData.first_name} ${msgData.lastName}`
-            : msgData.sender_id || msgData.user_uuid || 'User'),
-    senderUuid: msgData.sender_id || msgData.user_uuid,
-    timestamp: msgData.created_at,
-    isSender: msgData.isSender,
-  };
-  setMessages((prev) => ({
-    ...prev,
-    [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
-  }));
-}
+            const msg: Message = {
+              id:
+                msgData.id !== undefined && msgData.id !== null
+                  ? String(msgData.id)
+                  : `msg-${msgData.created_at || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              text: msgData.content?.text,
+              image:
+                msgData.content?.image ||
+                (Array.isArray(msgData.content?.images) && msgData.content.images.length > 0
+                  ? msgData.content.images[0].url
+                  : undefined),
+              sender:
+                (msgData.sender_id === userUuid || msgData.user_uuid === userUuid)
+                  ? 'You'
+                  : (msgData.first_name && msgData.last_name
+                      ? `${msgData.first_name} ${msgData.lastName}`
+                      : msgData.sender_id || msgData.user_uuid || 'User'),
+              senderUuid: msgData.sender_id || msgData.user_uuid,
+              timestamp: msgData.created_at,
+              isSender: msgData.isSender,
+            };
+            setMessages((prev) => ({
+              ...prev,
+              [activeRoom.id]: [...(prev[activeRoom.id] || []), msg],
+            }));
+          }
         } catch (err) {
           console.log('WebSocket message parse error:', err);
         }
@@ -249,7 +249,6 @@ if (data.type === 'message' && data.message) {
     }
   };
 
-  // Change handleCreateChat to accept a type
   const handleCreateChat = async (typeOverride?: 'support' | 'general' | 'order' | 'delivery') => {
     setChatTypeModalVisible(false);
     try {
@@ -258,11 +257,7 @@ if (data.type === 'message' && data.message) {
         Alert.alert('Authorization Error', 'You must be logged in to create a chat.');
         return;
       }
-
-      // Use the override if provided, otherwise fall back to state
       const type = typeOverride || chatType;
-
-      // Only require colleagues for general chat, not support chat
       if (type === 'general' && selectedColleagues.length === 0) {
         Alert.alert('Select at least one colleague');
         return;
@@ -429,7 +424,7 @@ if (data.type === 'message' && data.message) {
     formData.append('images', {
       uri: imageUri,
       name: filename,
-      type: 'image/jpeg', // or 'image/png', etc. You can detect this from the file extension if needed
+      type: 'image/jpeg',
     } as any);
 
     const response = await fetch(`${API_BASE}/v1/chats/upload-images/`, {
@@ -443,7 +438,7 @@ if (data.type === 'message' && data.message) {
     });
 
     const data = await response.json();
-    console.log('Upload image endpoint returned:', data); // <-- Add this line
+    console.log('Upload image endpoint returned:', data);
     return data;
   };
 

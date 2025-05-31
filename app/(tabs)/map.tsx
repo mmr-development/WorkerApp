@@ -356,7 +356,6 @@ export default function MapScreen() {
       try {
         currentOrder = currentOrderString ? JSON.parse(currentOrderString) : null;
       } catch {}
-      console.log('[MapScreen] inTransit:', inTransit, 'onMap:', onMap, 'currentOrder:', currentOrder);
 
       // Only send location if inTransit, onMap, and there is a valid current order
       if (inTransit === 'true' && onMap === 'true' && currentOrder && currentOrder.id && !locationIntervalActive) {
@@ -374,28 +373,44 @@ export default function MapScreen() {
     };
   }, [locationIntervalActive]);
 
-  useEffect(() => {
-    if (locationIntervalActive && userLocation) {
-      // Start sending location_update every 30s
-      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
-      locationIntervalRef.current = setInterval(() => {
-        sendLocationUpdate(userLocation);
-      }, 30000);
-      // Send immediately as well
-      sendLocationUpdate(userLocation);
-    } else {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
-        locationIntervalRef.current = null;
+useEffect(() => {
+  if (locationIntervalActive && userLocation) {
+    if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+    locationIntervalRef.current = setInterval(async () => {
+      const checkedIn = await AsyncStorage.getItem('worker_app_checked_in');
+      if (checkedIn !== 'true') return; // Only send if checked in
+
+      AsyncStorage.getItem('worker_app_current_order').then(orderStr => {
+        if (orderStr) {
+          console.log('[MapScreen] Sending location update because order exists');
+          sendLocationUpdate(userLocation);
+        }
+      });
+    }, 30000);
+    // Send immediately as well
+    AsyncStorage.getItem('worker_app_checked_in').then(checkedIn => {
+      if (checkedIn === 'true') {
+        AsyncStorage.getItem('worker_app_current_order').then(orderStr => {
+          if (orderStr) {
+            console.log('[MapScreen] Sending location update because order exists');
+            sendLocationUpdate(userLocation);
+          }
+        });
       }
+    });
+  } else {
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
     }
-    return () => {
-      if (locationIntervalRef.current) {
-        clearInterval(locationIntervalRef.current);
-        locationIntervalRef.current = null;
-      }
-    };
-  }, [locationIntervalActive, userLocation]);
+  }
+  return () => {
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
+    }
+  };
+}, [locationIntervalActive, userLocation]);
 
   if (loading || !region) {
     return (

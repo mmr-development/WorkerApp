@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as api from '../../api.js';
 import { API_BASE } from '@/constants/API';
 import { connectWebSocket, sendStatusUpdate, sendLocationUpdate, closeWebSocket } from '@/constants/WebSocketManager';
 
@@ -188,6 +189,8 @@ const confirmPickup = () => {
   if (currentOrder) {
     console.log('[HomeScreen] Confirm Pickup pressed for delivery:', currentOrder.id);
     sendStatusUpdate(currentOrder.id, 'picked_up');
+
+    setCurrentOrder({ ...currentOrder, pickedUp: true });
     if (workerLocation) {
       sendLocationUpdate(workerLocation);
       AsyncStorage.setItem('worker_app_in_transit', 'true');
@@ -258,6 +261,12 @@ const confirmPickup = () => {
       };
       await saveOrderToHistory(completedOrder);
 
+      // After delivery is confirmed, close and reopen WebSocket
+      closeWebSocket();
+      setTimeout(() => {
+        connectWebSocket(onMessageHandler);
+      }, 500); // 500ms delay to ensure socket is closed before reconnecting
+
     } catch (error) {
       console.error('Error processing delivery:', error);
       Alert.alert(
@@ -300,17 +309,32 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
   });
 };
 
+useEffect(() => {
+  let timeout: NodeJS.Timeout | null = null;
+
+  if (!currentOrder) {
+    timeout = setTimeout(() => {
+      console.log('[HomeScreen] No active order for 60s, refreshing WebSocket connection');
+      closeWebSocket();
+      setTimeout(() => {
+        connectWebSocket(onMessageHandler);
+      }, 500);
+    }, 60000);
+  }
+
+  return () => {
+    if (timeout) clearTimeout(timeout);
+  };
+}, [currentOrder]);
+
   // WebSocket connection for real-time order assignment
   useEffect(() => {
     if (!isCheckedIn) {
-      // Disconnect if not checked in
       closeWebSocket();
       setCurrentOrder(null); // Remove order when checking out
       return;
     }
     connectWebSocket(onMessageHandler);
-    // No need for wsRef.current = new WebSocket(...)!
-    // Use sendStatusUpdate/sendLocationUpdate from WebSocketManager everywhere
   }, [isCheckedIn]);
 
   // Check check-in status on mount and when it changes in storage
@@ -340,6 +364,7 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
+      let data =
       await fetch(`${API_BASE}/courier/checkin`, {
         method: 'POST',
         headers,
@@ -354,7 +379,6 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
     setCheckingIn(false);
   };
 
-  // "End Shift" handler (optional, if you want to allow check out)
   const handleEndShift = async () => {
     setIsCheckedIn(false);
     await AsyncStorage.setItem('worker_app_checked_in', 'false');
@@ -363,10 +387,9 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
       wsRef.current.close();
       wsRef.current = null;
     }
-    setCurrentOrder(null); // Remove order when checking out
+    setCurrentOrder(null);
   };
 
-  // Save currentOrder to AsyncStorage whenever it changes (so Sidebar can access it)
 useEffect(() => {
   if (currentOrder) {
     AsyncStorage.setItem('worker_app_current_order', JSON.stringify(currentOrder));
@@ -596,7 +619,6 @@ useEffect(() => {
         </ScrollView>
       </View>
 
-      {/* Sidebar Component */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
   );
@@ -622,14 +644,13 @@ useEffect(() => {
       completed: !!delivery.delivered_at,
       deliveryTime: delivery.delivered_at,
       tipAmount: delivery.order?.tip_amount,
-      contactlessDelivery: false, // Set based on your logic or backend
-      status: delivery.status, // <--- Add this line
+      contactlessDelivery: false,
+      status: delivery.status,
     };
   }
 
-  function onMessageHandler(data: any) {
-    console.log('[HomeScreen] WebSocket message received:', data);
-
+function onMessageHandler(data: any) {
+  console.log('[HomeScreen] WebSocket message received:', data);
     if (data.type === 'order_assigned' && data.payload) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload));
       console.log('[HomeScreen] Updated currentOrder from order_assigned:', data.payload);
@@ -637,6 +658,14 @@ useEffect(() => {
     if (data.type === 'current_deliveries' && data.payload?.deliveries?.length > 0) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from current_deliveries:', data.payload.deliveries[0]);
+    }
+    if (data.type === 'status_update' && data.payload?.deliveries?.length > 0) {
+      setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
+      console.log('[HomeScreen] Updated currentOrder from status_update:', data.payload.deliveries[0]);
+    }
+    if (data.type === 'delivery_assigned' && data.payload?.deliveries?.length > 0) {
+      setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
+      console.log('[HomeScreen] Updated currentOrder from delivery_assigned:', data.payload.deliveries[0]);
     }
   }
 }

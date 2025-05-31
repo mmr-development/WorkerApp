@@ -1266,7 +1266,7 @@ settingItemWide: {
 },
 chatMessageRow: {
   flexDirection: 'row',
-  alignItems: 'flex-end', // <-- changed from 'flex-start' to 'flex-end' for better vertical alignment
+  alignItems: 'flex-end',
   marginBottom: 12,
   paddingHorizontal: 10,
   paddingVertical: 2,

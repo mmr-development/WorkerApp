@@ -52,6 +52,26 @@ export default function SettingsScreen() {
     }
   };
 
+  const suppressNotifications = () => {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: false,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+};
+
+const allowNotifications = () => {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+};
+
   const saveUserData = async (token?: string, emailToRemember?: string, userId?: string) => {
     try {
       const dataToSave = {
@@ -69,9 +89,17 @@ export default function SettingsScreen() {
     }
   };
 
-  const toggleNotifications = () => {
-    setNotifications(prev => !prev);
-  };
+const toggleNotifications = () => {
+  setNotifications(prev => {
+    const newValue = !prev;
+    if (newValue) {
+      allowNotifications();
+    } else {
+      suppressNotifications();
+    }
+    return newValue;
+  });
+};
 
   const sendPushToken = async () => {
     try {
@@ -217,7 +245,6 @@ export default function SettingsScreen() {
     );
   };
 
-  // Change password logic
   const handleChangePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
       Alert.alert('Missing Fields', 'Please fill in all password fields.');
