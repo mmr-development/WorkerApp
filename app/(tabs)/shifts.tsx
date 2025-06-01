@@ -281,22 +281,62 @@ export default function ShiftsScreen() {
     setUpcomingShifts(mappedShifts);
   }
 
-  // Fetch shifts when the component mounts or when the viewed month changes
+  async function postVacation({ start, end }: { start: string, end: string }) {
+  const payload = {
+    start_datetime: `${start}T08:00:00.000Z`, // or your preferred start time
+    end_datetime: `${end}T22:00:00.000Z`,     // or your preferred end time
+    status: 'vacation',
+    notes: 'Vacation request from app'
+  };
+  let data = await api.post('couriers/my-schedules/', payload).then((res) => {
+    if (res.status === 200 || res.status === 201) {
+      return res.data;
+    }
+    throw new Error(`Failed to schedule vacation: ${res.status}`);
+  });
+  console.log('[Vacation] POST Response:', data);
+  await fetchShifts(); // Refresh shifts/vacations
+  return data;
+}
+
+async function fetchVacations() {
+  const from_date = startOfPrevWeek.startOf('day').toISOString();
+  const to_date = endOfNextWeek.endOf('day').toISOString();
+  const url = `couriers/my-schedules/?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}&status=vacation&offset=0&limit=100`;
+  let data = await api.get(url).then((res) => {
+    if (res.status === 200) {
+      return res.data;
+    }
+    throw new Error(`Failed to fetch vacations: ${res.status}`);
+  });
+  console.log('[Vacations] GET', url, data);
+  // Map API vacations to UI format
+  const mappedVacations = (data.schedules || []).map((v: any) => ({
+    id: v.id.toString(),
+    start: v.start_datetime.slice(0, 10),
+    end: v.end_datetime.slice(0, 10),
+    status: v.status === 'vacation' ? 'Approved' : v.status
+  }));
+  setVacations(mappedVacations);
+}
+
   useEffect(() => {
     if (loadedMonth !== selectedMonth) {
       fetchShifts();
+      fetchVacations(); // <-- Add this
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
   useEffect(() => {
     fetchShifts();
+    fetchVacations(); // <-- Add this
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only fetch once on mount
+  }, []);
 
-  // In your useEffect, trigger fetchShifts when weekOffset changes:
   useEffect(() => {
     fetchShifts();
+    fetchVacations(); // <-- Add this
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
@@ -315,14 +355,26 @@ export default function ShiftsScreen() {
       notes: 'Created from app'
     };
     let data = await api.post('couriers/my-schedules/', payload).then((res) => {
-      if (res.status === 200) {
+      if (res.status === 200 || res.status === 201) {
         return res.data;
       }
       throw new Error(`Failed to schedule shift: ${res.status}`);
     });
     console.log('[Shift] POST Response:', data);
 
-    // Refresh shifts after scheduling
+    // Optimistically update UI
+    setUpcomingShifts(prev => [
+      ...prev,
+      {
+        ...payload,
+        date,
+        start,
+        end,
+        status: 'Scheduled'
+      }
+    ]);
+
+    // Refresh shifts after scheduling (to ensure backend is source of truth)
     await fetchShifts();
     return data;
   }
@@ -331,33 +383,47 @@ export default function ShiftsScreen() {
   const midnightBonus = 25;
   let totalHours = 0;
   let totalEarnings = 0;
-
+  let shiftHourDetails: { date: string, hours: number }[] = [];
+  let vacationHourDetails: { date: string, hours: number }[] = [];
 
   const startOfWeek = startOfCurrentWeek.startOf('day');
   const endOfWeek = startOfCurrentWeek.add(6, 'day').endOf('day');
 
-  upcomingShifts.forEach(shift => {
-    const shiftDate = dayjs(shift.date);
-    if (shiftDate.isBefore(startOfWeek, 'day') || shiftDate.isAfter(endOfWeek, 'day')) return;
+  // Count shift hours
+  upcomingShifts
+    .filter(shift => shift.status === 'Scheduled')
+    .forEach(shift => {
+      const shiftDate = dayjs(shift.date);
+      if (shiftDate.isBefore(startOfWeek, 'day') || shiftDate.isAfter(endOfWeek, 'day')) return;
 
-    const start = dayjs(`${shift.date}T${shift.start}`);
-    const end = dayjs(`${shift.date}T${shift.end}`);
-    let hours = end.diff(start, 'minute') / 60;
-    totalHours += hours;
+      const start = dayjs(`${shift.date}T${shift.start}`);
+      const end = dayjs(`${shift.date}T${shift.end}`);
+      let hours = end.diff(start, 'minute') / 60;
+      totalHours += hours;
+      shiftHourDetails.push({ date: shift.date, hours });
 
-    let bonusHours = 0;
-    let bonusStart = dayjs(`${shift.date}T18:00`);
-    let bonusEnd = dayjs(`${shift.date}T22:00`);
-    if (end.isAfter(bonusStart)) {
-      const bonusPeriodStart = start.isAfter(bonusStart) ? start : bonusStart;
-      const bonusPeriodEnd = end.isBefore(bonusEnd) ? end : bonusEnd;
-      if (bonusPeriodEnd.isAfter(bonusPeriodStart)) {
-        bonusHours = bonusPeriodEnd.diff(bonusPeriodStart, 'minute') / 60;
+      let bonusHours = 0;
+      let bonusStart = dayjs(`${shift.date}T18:00`);
+      let bonusEnd = dayjs(`${shift.date}T22:00`);
+      if (end.isAfter(bonusStart)) {
+        const bonusPeriodStart = start.isAfter(bonusStart) ? start : bonusStart;
+        const bonusPeriodEnd = end.isBefore(bonusEnd) ? end : bonusEnd;
+        if (bonusPeriodEnd.isAfter(bonusPeriodStart)) {
+          bonusHours = bonusPeriodEnd.diff(bonusPeriodStart, 'minute') / 60;
+        }
       }
-    }
 
-    // Earnings: base pay for all hours, bonus for bonus hours
-    totalEarnings += hours * basePay + bonusHours * midnightBonus;
+      totalEarnings += hours * basePay + bonusHours * midnightBonus;
+    });
+
+  // Count vacation hours (for debug/logging only)
+  vacations.forEach(vac => {
+    const vacStart = dayjs(vac.start);
+    const vacEnd = dayjs(vac.end);
+    for (let d = vacStart; d.isBefore(vacEnd, 'day') || d.isSame(vacEnd, 'day'); d = d.add(1, 'day')) {
+      if (d.isBefore(startOfWeek, 'day') || d.isAfter(endOfWeek, 'day')) continue;
+      vacationHourDetails.push({ date: d.format('YYYY-MM-DD'), hours: 24 });
+    }
   });
 
   return (
@@ -500,7 +566,7 @@ export default function ShiftsScreen() {
                         start: requestStart,
                         end: requestEnd!
                       });
-                      setModalVisible(false);
+                      setModalVisible(false); // Move this AFTER postShift for best UX
                     }}
                   >
                     <Text style={styles.buttonText}>Create shift</Text>
@@ -517,8 +583,6 @@ export default function ShiftsScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-
-      {/* Vacation request modal */}
       <Modal
         visible={vacationModalVisible}
         transparent
@@ -636,16 +700,12 @@ export default function ShiftsScreen() {
                       vacationConflict ? styles.inactiveButton : styles.activeButton
                     ]}
                     disabled={!!vacationConflict}
-                    onPress={() => {
-                      setVacations([
-                        ...vacations,
-                        {
-                          id: (vacations.length + 1).toString(),
-                          start: vacationStart,
-                          end: vacationEnd,
-                          status: 'Pending' // init status pending
-                        }
-                      ]);
+                    onPress={async () => {
+                      await postVacation({
+                        start: vacationStart,
+                        end: vacationEnd
+                      });
+                      await fetchVacations();
                       setVacationModalVisible(false);
                       setVacationStep('start');
                     }}

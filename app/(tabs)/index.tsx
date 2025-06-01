@@ -248,27 +248,15 @@ const confirmDelivery = async () => {
       name: filename,
       type: 'image/jpeg',
     } as any);
-    let data = await api.post('deliveries/${currentOrder.id}/documentation', formData, true).then((res) => {
-      if (res.status === 200) {
-        return res.json();
+    let res = await api.postImage(`deliveries/${currentOrder.id}/documentation/`, formData);
+    console.log('Image upload response:', res);
+      if (res.status === 200 || res.status === 201) {
+        let uploadData = res.data;
+      } else {
+        throw new Error('Failed to upload delivery documentation');
       }
-      throw new Error('Failed to upload delivery documentation');
-    });
-
-    let uploadData = data;
 
     sendStatusUpdate(currentOrder.id, 'delivered');
-
-    // Save to history and clear current order
-    const completedOrder: OrderDetails = {
-      ...currentOrder,
-      completed: true,
-      deliveryTime: new Date().toISOString(),
-      tipped: true,  // For demo
-      tipAmount: 25, // For demo
-      deliveryPhoto: imageUri,
-    };
-    await saveOrderToHistory(completedOrder);
 
     // Reconnect WebSocket after finishing the order
     setTimeout(() => {
@@ -360,10 +348,9 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
       wsRef.current.close();
       wsRef.current = null;
     }
-    setCurrentOrder(null); // Remove order when checking out
+    setCurrentOrder(null);
   };
 
-  // Save currentOrder to AsyncStorage whenever it changes
 useEffect(() => {
   if (currentOrder) {
     AsyncStorage.setItem('worker_app_current_order', JSON.stringify(currentOrder));
@@ -644,7 +631,6 @@ useEffect(() => {
   }
 
   function onMessageHandler(data: any) {
-    console.log('[HomeScreen] WebSocket message received:', data);
 
     if (data.type === 'order_assigned' && data.payload) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload));
@@ -654,7 +640,6 @@ useEffect(() => {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from current_deliveries:', data.payload.deliveries[0]);
     }
-    // Add this block:
     if (data.type === 'delivery_assigned' && data.payload?.deliveries?.length > 0) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from delivery_assigned:', data.payload.deliveries[0]);

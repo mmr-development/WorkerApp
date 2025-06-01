@@ -9,7 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const ACCESS_TOKEN_KEY = 'worker_app_access_token';
 const REFRESH_TOKEN_KEY = 'worker_app_refresh_token';
 
-export async function saveTokens(accessToken: string, refreshToken: string) {
+export async function saveTokens(accessToken: string | undefined, refreshToken: string | undefined) {
+  if (!accessToken || !refreshToken) {
+    console.warn('Attempted to save undefined tokens:', accessToken, refreshToken);
+    return;
+  }
   console.log('Saving tokens:', accessToken, refreshToken);
   await AsyncStorage.multiSet([
     [ACCESS_TOKEN_KEY, accessToken],
@@ -56,7 +60,7 @@ export const reauthenticate = async () => {
           window.location.href = '/';
       } else if (res.status === 200) {
           return res.json().then(async (data) => {
-              await saveTokens(data.access, data.refresh);
+              await saveTokens(data.access_token, data.refresh_token);
           });
       }
   });
@@ -89,16 +93,15 @@ export const post = async (path: string, body: any, tried: boolean = false): Pro
   } catch (e) {
     data = text;
   } 
-  console.log('Sign-in response data:', data);
-  console.log(path)
-  console.log(path == 'auth/sign-in/?client_id=courier', 'your mother')
 
-  if (path == 'auth/sign-in/?client_id=courier') {
-    console.log(data.access_token, data.refresh_token);
-    console.log('passed');
+if (path == 'auth/sign-in/?client_id=courier') {
+  if (data.access_token && data.refresh_token) {
     await saveTokens(data.access_token, data.refresh_token);
     console.log('Saved tokens:', await getAccessToken(), await getRefreshToken());
+  } else {
+    console.warn('Sign-in response missing tokens:', data);
   }
+}
   return {
       status: response.status,
       data: data,
@@ -183,3 +186,11 @@ export const postImage = async (path: string, data: FormData, tried: boolean = f
       data: await response.json(),
   };
 }
+
+export const clockIn = async () => {
+  return post('courier/clock-in', {});
+};
+
+export const clockOut = async () => {
+  return post('courier/clock-out', {});
+};

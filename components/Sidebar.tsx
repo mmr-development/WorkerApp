@@ -5,6 +5,7 @@ import { Link, useRouter } from 'expo-router';
 import { styles, colors } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { OrderDetails } from '@/app/(tabs)/index';
+import * as api from '../constants/API'; // Make sure this import exists
 
 
 const { width } = Dimensions.get('window');
@@ -80,12 +81,21 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
     const newStatus = !shiftActive;
     setShiftActive(newStatus);
     try {
-      await AsyncStorage.setItem(SHIFT_STATUS_KEY, newStatus.toString());
-      await AsyncStorage.setItem(CHECKED_IN_KEY, newStatus ? 'true' : 'false');
-      setIsCheckedIn(newStatus);
-      console.log('[Sidebar] Toggled shift. Checked in:', newStatus);
+      if (newStatus) {
+        await api.clockIn();
+        await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'true');
+        await AsyncStorage.setItem(CHECKED_IN_KEY, 'true');
+        setIsCheckedIn(true);
+        console.log('[Sidebar] Clocked in');
+      } else {
+        await api.clockOut();
+        await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'false');
+        await AsyncStorage.setItem(CHECKED_IN_KEY, 'false');
+        setIsCheckedIn(false);
+        console.log('[Sidebar] Clocked out');
+      }
     } catch (error) {
-      console.error('Error saving shift status:', error);
+      console.error('Error toggling shift:', error);
     }
   };
 
