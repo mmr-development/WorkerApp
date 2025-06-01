@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import dayjs from 'dayjs';
-import { API_BASE, getAccessToken } from '../../constants/API';
+import * as api from '../../constants/API';
 
 interface VacationPeriod {
   id: string;
@@ -254,18 +254,15 @@ export default function ShiftsScreen() {
     : [];
 
   async function fetchShifts() {
-    const accessToken = await getAccessToken();
-    // Fetch from start of previous week to end of next week
     const from_date = startOfPrevWeek.startOf('day').toISOString();
     const to_date = endOfNextWeek.endOf('day').toISOString();
-    const url = `${API_BASE}/v1/couriers/my-schedules/?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}&status=scheduled&offset=0&limit=100`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+    const url = `couriers/my-schedules/?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}&status=scheduled&offset=0&limit=100`;
+    let data = await api.get(url).then((res) => {
+      if (res.status === 200) {
+        return res.data;
       }
+      throw new Error(`Failed to fetch shifts: ${res.status}`);
     });
-    const data = await res.json();
     console.log('[Shifts] GET', url, data);
 
     // Map API shifts to UI format
@@ -311,52 +308,22 @@ export default function ShiftsScreen() {
       alert('You already have a shift scheduled for this day.');
       return;
     }
-
-    const accessToken = await getAccessToken();
     const payload = {
       start_datetime: `${date}T${start}:00.000Z`,
       end_datetime: `${date}T${end}:00.000Z`,
       status: 'scheduled',
       notes: 'Created from app'
     };
-    console.log('[Shift] POST Sending:', payload);
-
-    const res = await fetch(`${API_BASE}/v1/couriers/my-schedules/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    let data = await api.post('couriers/my-schedules/', payload).then((res) => {
+      if (res.status === 200) {
+        return res.data;
+      }
+      throw new Error(`Failed to schedule shift: ${res.status}`);
     });
-    const data = await res.json();
     console.log('[Shift] POST Response:', data);
 
     // Refresh shifts after scheduling
     await fetchShifts();
-    return data;
-  }
-
-  // When creating a shift request, POST to the backend and refresh shifts
-  async function postShiftRequest({ date, start, end }: { date: string, start: string, end: string }) {
-    const accessToken = await getAccessToken();
-    const payload = {
-      start_datetime: `${date}T${start}:00.000Z`,
-      end_datetime: `${date}T${end}:00.000Z`,
-      status: 'scheduled',
-    };
-    console.log('[ShiftRequest] Sending:', payload);
-    const res = await fetch(`${API_BASE}/v1/couriers/schedules/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    console.log('[ShiftRequest] Response:', data);
-    fetchShifts();
     return data;
   }
 

@@ -5,7 +5,7 @@ import { styles } from '../../styles';
 import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
-import { API_BASE, clearTokens, saveTokens } from '@/constants/API';
+import * as api from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -115,11 +115,10 @@ const toggleNotifications = () => {
           });
           token = expoPushToken.data;
           console.log('Expo push notification token:', token);
-          await fetch(`${API_BASE}/v1/users/push-token/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, app_type: 'courier' }),
-          });
+          await api.post('users/push-token', {
+            token,
+            app_type: 'courier'
+          })
         }
       }
     } catch (e) {
@@ -133,31 +132,20 @@ const toggleNotifications = () => {
       return;
     }
     setLoading(true);
-    let data;
     try {
-      const response = await fetch(`${API_BASE}/v1/auth/sign-in/?client_id=courier`, 
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            email,
-            password
-          })
-        });
-      const responseText = await response.text();
-      console.log('Sign-in response status:', response.status);
-      console.log('Sign-in response body:', responseText);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      data = JSON.parse(responseText);
+      let data = await api.post('auth/sign-in/?client_id=courier', {
+        email: email,
+        password: password
+      }).then((res) => {
+        console.log(res.status)
+        if (res.status == 200) {
+          return res.data;
+        }
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      });
       setIsLoggedIn(true);
       await saveUserData(data.refresh_token, email, data.user_id);
-      await saveTokens(data.access_token, data.refresh_token);
+      await api.saveTokens(data.access_token, data.refresh_token);
       setEmail(email);
       setPassword('');
       await sendPushToken();
@@ -181,24 +169,20 @@ const toggleNotifications = () => {
       setIsLoggedIn(false);
       setEmail('');
       await AsyncStorage.removeItem(USER_DATA_KEY);
-      await clearTokens();
+      await api.clearTokens();
       return;
     }
     try {
-      await fetch(`${API_BASE}/v1/auth/sign-out/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ refresh_token: refreshToken })
+      await api.post('auth/sign-out/', {
+        refresh_token: refreshToken
       });
     } catch (error) {
+      console.error('Logout failed:', error);
     }
     setIsLoggedIn(false);
     setEmail('');
     await AsyncStorage.removeItem(USER_DATA_KEY);
-    await clearTokens();
+    await api.clearTokens();
     setRefreshToken(null);
   };
 
@@ -253,22 +237,16 @@ const toggleNotifications = () => {
     }
     setPwLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/v1/auth/change-password/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          current_password: currentPw,
-          new_password: newPw,
-          confirm_password: confirmPw
-        })
+      await api.post('auth/change-password/', {
+        current_password: currentPw,
+        new_password: newPw,
+        confirm_password: confirmPw
+      }).then((res) => {
+        if (res.status === 200) {
+          return res.data;
+        }
+        throw new Error(`HTTP error! Status: ${res.status}`);
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Password change failed');
-      }
       Alert.alert('Success', 'Password changed successfully.');
       setChangePwModalVisible(false);
       setCurrentPw('');

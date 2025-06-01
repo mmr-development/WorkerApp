@@ -9,6 +9,7 @@ import { useSidebar } from '@/hooks/useSidebar';
 import { styles, colors } from '../../styles';
 import { sendLocationUpdate } from '@/constants/WebSocketManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as api from '@/constants/API';
 
 const ORS_API_KEY = '5b3ce3597851110001cf6248a34c97c85734448898d10ca158d7e9b3';
 

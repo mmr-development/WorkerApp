@@ -1,4 +1,4 @@
-import { API_BASE } from './API';
+import * as api from './API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type WebSocketEventHandler = (data: any) => void;
@@ -46,8 +46,8 @@ export async function connectWebSocket(
 
   if (ws && ws.readyState === WebSocket.OPEN) return ws;
   const wsUrl = chatId
-    ? API_BASE.replace(/^http/, 'ws') + `/ws/chat/${chatId}`
-    : API_BASE.replace(/^http/, 'ws') + '/ws/courier/delivery';
+    ? api.wsurl + `ws/chat/${chatId}`
+    :api.wsurl+ 'ws/courier/delivery';
 
   ws = new WebSocket(wsUrl);
   messageHandler = onMessage;
@@ -80,18 +80,24 @@ export async function connectWebSocket(
     }
   };
 
-  ws.onmessage = (event) => {
+  ws.onmessage = async(event) => {
     try {
       console.log('[WebSocketManager] Raw message:', event.data);
       const data = JSON.parse(event.data);
       if (messageHandler) messageHandler(data);
+      if (data.status === 401) {
+        console.log('[WebSocketManager] Received 401, attempting reauthentication...');
+        await api.reauthenticate();
+        tryReconnect(messageHandler?? undefined, lastOnClose || undefined, lastOnError || undefined);
+        return;
+      }
     } catch (err) {
       console.log('WebSocket message parse error:', err);
     }
   };
 
   ws.onerror = (err) => {
-    console.log('WebSocket error:', err);
+    console.log('WebSocket error in WSM:', err);
     if (onError) onError(err);
     ws?.close();
   };
@@ -104,7 +110,7 @@ export async function connectWebSocket(
     }
     if (onClose) onClose();
     console.log('[WebSocketManager] WebSocket connection closed');
-    tryReconnect(onMessage, onClose, onError); // <-- add this
+    tryReconnect(onMessage, onClose, onError);
   };
 
   return ws;

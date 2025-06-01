@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { API_BASE } from '@/constants/API';
+import * as api from '@/constants/API';
 import { connectWebSocket, sendStatusUpdate, sendLocationUpdate, closeWebSocket, sendLocationResponse } from '@/constants/WebSocketManager';
 import * as TaskManager from 'expo-task-manager';
 
@@ -242,44 +242,21 @@ const confirmDelivery = async () => {
     const imageUri = result.assets[0].uri;
     const filename = imageUri.split('/').pop() || 'delivery.jpg';
 
-    // Upload image to /deliveries/:delivery_id/documentation
-    const accessToken = await AsyncStorage.getItem('worker_app_access_token');
     const formData = new FormData();
     formData.append('images', {
       uri: imageUri,
       name: filename,
       type: 'image/jpeg',
     } as any);
-
-    const uploadRes = await fetch(
-      `${API_BASE}/v1/deliveries/${currentOrder.id}/documentation`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
-        },
-        body: formData,
+    let data = await api.post('deliveries/${currentOrder.id}/documentation', formData, true).then((res) => {
+      if (res.status === 200) {
+        return res.json();
       }
-    );
-    const uploadText = await uploadRes.text();
-    console.log('Delivery documentation upload raw response:', uploadText);
+      throw new Error('Failed to upload delivery documentation');
+    });
 
-    let uploadData;
-    try {
-      uploadData = JSON.parse(uploadText);
-    } catch (e) {
-      uploadData = uploadText;
-    }
-    console.log('Delivery response:', uploadData);
+    let uploadData = data;
 
-    if (!uploadRes.ok) {
-      Alert.alert('Upload failed', 'Could not upload delivery documentation. Please try again.');
-      return;
-    }
-
-    // Mark as delivered via WebSocket
     sendStatusUpdate(currentOrder.id, 'delivered');
 
     // Save to history and clear current order
@@ -365,18 +342,7 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
   const handleStartShift = async () => {
     setCheckingIn(true);
     try {
-      const token = await AsyncStorage.getItem('worker_app_access_token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      await fetch(`${API_BASE}/courier/checkin`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ checked_in: true }),
-      });
+      await api.post('courier/checkin', { checked_in: true });
       setIsCheckedIn(true);
       await AsyncStorage.setItem('worker_app_checked_in', 'true');
       wsRef.current?.send(JSON.stringify({ type: 'checked_in', payload: { checked_in: true } }));

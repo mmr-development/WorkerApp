@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import { styles, colors } from '../../styles';
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE, getAccessToken, getPublicImageUrl } from '@/constants/API';
+import * as api from '@/constants/API';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { connectWebSocket, closeWebSocket } from '@/constants/WebSocketManager';
 import { useFocusEffect } from '@react-navigation/native';
@@ -61,16 +61,11 @@ export default function ChatPage() {
 
   const fetchAvailableCouriers = async () => {
     try {
-      const accessToken = await getAccessToken();
-      if (!accessToken || !activeRoom) return;
-      const response = await fetch(`${API_BASE}/v1/couriers/colleagues/`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'accept': 'application/json',
-        },
+      let data = await api.get('couriers/colleagues/').then((res) => {
+        if (res.status === 200) {
+          return res.data;
+        }
       });
-      if (!response.ok) throw new Error('Failed to fetch colleagues');
-      const data = await response.json();
       setAvailableCouriers(Array.isArray(data.couriers) ? data.couriers : []);
     } catch (err) {
       setAvailableCouriers([]);
@@ -93,22 +88,11 @@ export default function ChatPage() {
 
   const fetchChats = async () => {
     try {
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        Alert.alert('Authorization Error', 'You must be logged in to view chats.');
-        return;
-      }
-      const response = await fetch(`${API_BASE}/v1/chats/`, {
-        headers:
-         {
-          'Authorization': `Bearer ${accessToken}`,
-          'accept': '*/*',
-        },
+      let data = await api.get('chats/').then((res) => {
+        if (res.status === 200) {
+          return res.data;
+        }
       });
-      if (!response.ok) {
-        throw new Error('Failed to fetch chats');
-      }
-      const data = await response.json();
       const chatsArray = Array.isArray(data.chats) ? data.chats : [];
       const rooms: ChatRoom[] = chatsArray.map((chat: any) => ({
         id: String(chat.id),
@@ -215,7 +199,7 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
       },
       () => {},
       (err) => {
-        console.log('WebSocket error:', err);
+        console.log('WebSocket error in chat:', err);
       },
       activeRoom.id
     ).then(ws => {
@@ -229,16 +213,11 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
 
   const fetchColleagues = async () => {
     try {
-      const accessToken = await getAccessToken();
-      if (!accessToken) return;
-      const response = await fetch(`${API_BASE}/v1/couriers/colleagues/`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'accept': 'application/json',
-        },
+      let data = await api.get('couriers/colleagues/').then((res) => {
+        if (res.status === 200) {
+          return res.data;
+        }
       });
-      if (!response.ok) throw new Error('Failed to fetch colleagues');
-      const data = await response.json();
       setColleagues(Array.isArray(data.couriers) ? data.couriers : []);
     } catch (err) {
       setColleagues([]);
@@ -248,22 +227,17 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
   const handleCreateChat = async (typeOverride?: 'support' | 'general' | 'order' | 'delivery') => {
     setChatTypeModalVisible(false);
     try {
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        Alert.alert('Authorization Error', 'You must be logged in to create a chat.');
-        return;
-      }
       const type = typeOverride || chatType;
       if (type === 'general' && selectedColleagues.length === 0) {
         Alert.alert('Select at least one colleague');
         return;
       }
 
-      let endpoint = `${API_BASE}/v1/chats/`;
+      let endpoint = `chats/`;
       let payload: any = {};
 
       if (type === 'support') {
-        endpoint = `${API_BASE}/v1/chats/support/`;
+        endpoint = `chats/support/`;
         payload = {};
       } else {
         payload = {
@@ -275,36 +249,14 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
         };
       }
 
-      // Log what is being sent
-      console.log('Creating chat. Endpoint:', endpoint);
-      console.log('Payload:', payload);
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers:
-         {
-          'Authorization': `Bearer ${accessToken}`,
-          'accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      let responseBody = await api.post(endpoint, payload).then((res) => {
+        if (res.status === 200) {
+          return res.data;
+        } else {
+          throw new Error(res.data?.detail || res.data?.message || 'Failed to create chat');
+        }
       });
-
-      // Log what is received
-      let responseBody = null;
-      try {
-        responseBody = await response.json();
-      } catch (e) {
-        responseBody = await response.text();
-      }
-      console.log('Create chat response:', response.status, responseBody);
-
-      if (!response.ok) {
-        throw new Error(
-          (responseBody && (responseBody.detail || responseBody.message)) ||
-          'Failed to create chat'
-        );
-      }
+      console.log('Create chat response:',  responseBody);
       await fetchChats();
       setSelectedColleagues([]);
     } catch (error: any) {
@@ -328,7 +280,8 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
     if (!input.trim() || sending) return;
     setSending(true);
 
-    const accessToken = await getAccessToken();
+    const accessToken = await api.getAccessToken();
+    console.log('Access token:', accessToken);
     if (!accessToken) {
       Alert.alert('Authorization Error', 'You must be logged in to send messages.');
       setSending(false);
@@ -410,7 +363,7 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
   };
 
   const uploadImage = async (imageUri: string, filename: string) => {
-    const accessToken = await getAccessToken();
+    const accessToken = await api.getAccessToken();
     if (!accessToken) {
       Alert.alert('Authorization Error', 'You must be logged in to upload images.');
       return;
@@ -423,17 +376,13 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
       type: 'image/jpeg',
     } as any);
 
-    const response = await fetch(`${API_BASE}/v1/chats/upload-images/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'accept': 'application/json',
-        'Content-Type': 'multipart/form-data',
-      },
-      body: formData,
+    const data = await api.postImage('chats/upload-images/', formData).then((res) => {
+      if (res.status === 200) {
+        return res.data;
+      } else {
+        throw new Error(res.data?.detail || res.data?.message || 'Failed to upload image');
+      }
     });
-
-    const data = await response.json();
     console.log('Upload image endpoint returned:', data);
     return data;
   };
@@ -646,9 +595,9 @@ renderItem={({ item }) => {
           </Text>
         ) : null}
         {item.image ? (
-          <TouchableOpacity onPress={() => setEnlargedImage(getPublicImageUrl(item.image))}>
+          <TouchableOpacity onPress={() => setEnlargedImage(api.baseurl + 'public' + item.image)}>
             <Image
-              source={{ uri: getPublicImageUrl(item.image) }}
+              source={{ uri: api.baseurl + 'public' + (item.image) }}
               style={styles.chatMessageImage}
             />
           </TouchableOpacity>
@@ -836,7 +785,7 @@ renderItem={({ item }) => {
 const handleAddParticipants = async () => {
   if (!activeRoom) return;
   try {
-    const accessToken = await getAccessToken();
+    const accessToken = await api.getAccessToken();
     if (!accessToken) {
       Alert.alert('Authorization Error', 'You must be logged in to add participants.');
       return;
@@ -847,28 +796,14 @@ const handleAddParticipants = async () => {
     }));
     const payload = { participants };
     console.log('Sending to backend:', JSON.stringify(payload));
-    const response = await fetch(`${API_BASE}/v1/chats/${activeRoom.id}/participants`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-    let responseBody = null;
-    try {
-      responseBody = await response.json();
-    } catch (e) {
-      responseBody = await response.text();
-    }
-    console.log('Backend response:', response.status, responseBody);
-    if (!response.ok) {
-      throw new Error(
-        (responseBody && (responseBody.detail || responseBody.message)) ||
-        'Failed to add participants'
-      );
-    }
+    let responseBody = await api.post(`chats/${activeRoom.id}/participants/`, payload).then((res) => {
+      if (res.status === 200) {
+        return res.data;
+      } else {
+        throw new Error(res.data?.detail || res.data?.message || 'Failed to add participants');
+      }
+    })
+    console.log('Backend response:', responseBody);
     setAddUserModalVisible(false);
     setSelectedToAdd([]);
     Alert.alert('Success', 'Participants added!');

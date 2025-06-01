@@ -1,5 +1,5 @@
 // import BASE_URL from the environment variable
-const url = '546f-185-19-132-69.ngrok-free.app/';
+const url = 'aa3a-77-241-136-45.ngrok-free.app/';
 export const baseurl = 'https://' + url;
 export const wsurl = 'wss://' + url;
 const apiurl = baseurl + 'v1/';
