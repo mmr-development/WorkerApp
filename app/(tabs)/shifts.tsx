@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { styles, colors } from '../../styles';
@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Sidebar } from '@/components/Sidebar';
 import { useSidebar } from '@/hooks/useSidebar';
 import dayjs from 'dayjs';
+import { API_BASE, getAccessToken } from '../../constants/API';
 
 interface VacationPeriod {
   id: string;
@@ -13,30 +14,6 @@ interface VacationPeriod {
   end: string;
   status: 'Pending' | 'Approved';
 }
-
-const initialShifts = [
-  {
-    id: '1',
-    date: '2025-05-10',
-    start: '09:00',
-    end: '17:00',
-    status: 'Scheduled',
-  },
-  {
-    id: '2',
-    date: '2025-06-12',
-    start: '12:00',
-    end: '20:00',
-    status: 'Scheduled',
-  },
-  {
-    id: '3',
-    date: '2024-06-15',
-    start: '10:00',
-    end: '18:00',
-    status: 'Pending',
-  },
-];
 
 const initialVacations: VacationPeriod[] = [
   {
@@ -49,8 +26,7 @@ const initialVacations: VacationPeriod[] = [
 
 export default function ShiftsScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
-  const today = dayjs();
-  const [selectedDate, setSelectedDate] = useState(today.format('YYYY-MM-DD'));
+  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
   const [modalVisible, setModalVisible] = useState(false);
   const [requestDate, setRequestDate] = useState<string | null>(null);
@@ -58,7 +34,7 @@ export default function ShiftsScreen() {
   const [requestEnd, setRequestEnd] = useState<string | null>(null);
   const [step, setStep] = useState<'start' | 'end'>('start');
   const [shiftDuration, setShiftDuration] = useState<string | null>(null);
-  const [upcomingShifts, setUpcomingShifts] = useState(initialShifts);
+  const [upcomingShifts, setUpcomingShifts] = useState<any[]>([]);
   const [vacationModalVisible, setVacationModalVisible] = useState(false);
   const [vacationStart, setVacationStart] = useState(dayjs().format('YYYY-MM-DD'));
   const [vacationEnd, setVacationEnd] = useState(dayjs().add(1, 'day').format('YYYY-MM-DD'));
@@ -67,13 +43,14 @@ export default function ShiftsScreen() {
   const [vacationConflict, setVacationConflict] = useState<string | null>(null);
   const [vacations, setVacations] = useState<VacationPeriod[]>(initialVacations);
 
-  // Helper: generate hour options between 08:00 and 22:00
+  // Track which month is currently loaded
+  const [loadedMonth, setLoadedMonth] = useState(dayjs().format('YYYY-MM'));
+
   const hourOptions = Array.from({ length: 15 }, (_, h) => {
     const hour = h + 8;
     return `${hour.toString().padStart(2, '0')}:00`;
   });
 
-  // Helper: calculate duration in hours
   function calculateDuration(start: string, end: string) {
     const [startH, startM] = start.split(':').map(Number);
     const [endH, endM] = end.split(':').map(Number);
@@ -83,7 +60,6 @@ export default function ShiftsScreen() {
     return diff > 0 ? `${(diff / 60).toFixed(2)}h` : null;
   }
 
-  // Helper: calculate vacation days
   function calculateVacationDays(start: string, end: string) {
     const startDate = dayjs(start);
     const endDate = dayjs(end);
@@ -91,20 +67,28 @@ export default function ShiftsScreen() {
     return diff > 0 ? diff : 1;
   }
 
-  // Calculate the start of the week based on offset
+  // Calculate the start and end of the currently viewed week and month
+  const selectedWeekStart = dayjs().startOf('week').add(1, 'day').add(weekOffset, 'week');
+  const selectedMonth = selectedWeekStart.format('YYYY-MM');
+  const fetchStart = selectedWeekStart.startOf('month').startOf('day');
+  const fetchEnd = selectedWeekStart.endOf('month').endOf('day');
+
+  // Calculate the start of the previous week and end of the next week
+  const baseWeek = dayjs().startOf('week').add(1, 'day'); // Monday
+  const startOfCurrentWeek = baseWeek.add(weekOffset, 'week');
+  const startOfPrevWeek = startOfCurrentWeek.subtract(7, 'day');
+  const endOfNextWeek = startOfCurrentWeek.add(13, 'day'); // 7 days current + 7 days next - 1
+
   const selectedDay = dayjs(selectedDate);
-  const baseWeek = today.startOf('week').add(1, 'day'); // Monday
-  const startOfWeek = baseWeek.add(weekOffset, 'week');
   const weekDaysVertical = [];
 
   for (let i = 0; i < 7; i++) {
-    const date = startOfWeek.add(i, 'day');
+    const date = startOfCurrentWeek.add(i, 'day');
     const dateStr = date.format('YYYY-MM-DD');
     const shift = upcomingShifts.find(s => s.date === dateStr);
     const hasShift = !!shift;
-    const isToday = dateStr === today.format('YYYY-MM-DD');
+    const isToday = dateStr === dayjs().format('YYYY-MM-DD');
     
-    // Check if this is a vacation day
     const isVacationDay = vacations.some(v => {
       const start = dayjs(v.start);
       const end = dayjs(v.end);
@@ -113,7 +97,6 @@ export default function ShiftsScreen() {
              (current.isBefore(end) || current.isSame(end, 'day'));
     });
 
-    // Find vacation information for this day if any
     const vacation = vacations.find(v => {
       const start = dayjs(v.start);
       const end = dayjs(v.end);
@@ -125,7 +108,6 @@ export default function ShiftsScreen() {
     // Check if this is a pending vacation day
     const isPendingVacation = isVacationDay && vacation?.status === 'Pending';
 
-    // Calculate shift duration if shift exists
     let shiftDuration = '';
     if (shift) {
       const start = dayjs(`${shift.date}T${shift.start}`);
@@ -271,6 +253,146 @@ export default function ShiftsScreen() {
     ? upcomingShifts.filter(s => s.date === selectedDate)
     : [];
 
+  async function fetchShifts() {
+    const accessToken = await getAccessToken();
+    // Fetch from start of previous week to end of next week
+    const from_date = startOfPrevWeek.startOf('day').toISOString();
+    const to_date = endOfNextWeek.endOf('day').toISOString();
+    const url = `${API_BASE}/v1/couriers/my-schedules/?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}&status=scheduled&offset=0&limit=100`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const data = await res.json();
+    console.log('[Shifts] GET', url, data);
+
+    // Map API shifts to UI format
+    const mappedShifts = (data.schedules || []).map((s: any) => {
+      const start = dayjs(s.start_datetime);
+      const end = dayjs(s.end_datetime);
+      return {
+        ...s,
+        date: start.format('YYYY-MM-DD'),
+        start: start.format('HH:mm'),
+        end: end.format('HH:mm'),
+        status: s.status === 'scheduled' ? 'Scheduled' : s.status
+      };
+    });
+
+    setUpcomingShifts(mappedShifts);
+  }
+
+  // Fetch shifts when the component mounts or when the viewed month changes
+  useEffect(() => {
+    if (loadedMonth !== selectedMonth) {
+      fetchShifts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    fetchShifts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only fetch once on mount
+
+  // In your useEffect, trigger fetchShifts when weekOffset changes:
+  useEffect(() => {
+    fetchShifts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset]);
+
+  // Prevent scheduling a shift on a day that already has a shift
+  async function postShift({ date, start, end }: { date: string, start: string, end: string }) {
+    // Check if a shift already exists for this date
+    const alreadyScheduled = upcomingShifts.some(s => s.date === date);
+    if (alreadyScheduled) {
+      alert('You already have a shift scheduled for this day.');
+      return;
+    }
+
+    const accessToken = await getAccessToken();
+    const payload = {
+      start_datetime: `${date}T${start}:00.000Z`,
+      end_datetime: `${date}T${end}:00.000Z`,
+      status: 'scheduled',
+      notes: 'Created from app'
+    };
+    console.log('[Shift] POST Sending:', payload);
+
+    const res = await fetch(`${API_BASE}/v1/couriers/my-schedules/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    console.log('[Shift] POST Response:', data);
+
+    // Refresh shifts after scheduling
+    await fetchShifts();
+    return data;
+  }
+
+  // When creating a shift request, POST to the backend and refresh shifts
+  async function postShiftRequest({ date, start, end }: { date: string, start: string, end: string }) {
+    const accessToken = await getAccessToken();
+    const payload = {
+      start_datetime: `${date}T${start}:00.000Z`,
+      end_datetime: `${date}T${end}:00.000Z`,
+      status: 'scheduled',
+    };
+    console.log('[ShiftRequest] Sending:', payload);
+    const res = await fetch(`${API_BASE}/v1/couriers/schedules/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    console.log('[ShiftRequest] Response:', data);
+    fetchShifts();
+    return data;
+  }
+
+  const basePay = 133;
+  const midnightBonus = 25;
+  let totalHours = 0;
+  let totalEarnings = 0;
+
+
+  const startOfWeek = startOfCurrentWeek.startOf('day');
+  const endOfWeek = startOfCurrentWeek.add(6, 'day').endOf('day');
+
+  upcomingShifts.forEach(shift => {
+    const shiftDate = dayjs(shift.date);
+    if (shiftDate.isBefore(startOfWeek, 'day') || shiftDate.isAfter(endOfWeek, 'day')) return;
+
+    const start = dayjs(`${shift.date}T${shift.start}`);
+    const end = dayjs(`${shift.date}T${shift.end}`);
+    let hours = end.diff(start, 'minute') / 60;
+    totalHours += hours;
+
+    let bonusHours = 0;
+    let bonusStart = dayjs(`${shift.date}T18:00`);
+    let bonusEnd = dayjs(`${shift.date}T22:00`);
+    if (end.isAfter(bonusStart)) {
+      const bonusPeriodStart = start.isAfter(bonusStart) ? start : bonusStart;
+      const bonusPeriodEnd = end.isBefore(bonusEnd) ? end : bonusEnd;
+      if (bonusPeriodEnd.isAfter(bonusPeriodStart)) {
+        bonusHours = bonusPeriodEnd.diff(bonusPeriodStart, 'minute') / 60;
+      }
+    }
+
+    // Earnings: base pay for all hours, bonus for bonus hours
+    totalEarnings += hours * basePay + bonusHours * midnightBonus;
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.mainContent}>
@@ -311,14 +433,18 @@ export default function ShiftsScreen() {
               <Text style={styles.legendText}>Shift</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendColorBox, { backgroundColor: colors.warning }]} />
-              <Text style={styles.legendText}>Pending</Text>
-            </View>
-            <View style={styles.legendItem}>
               <View style={[styles.legendColorBox, { backgroundColor: '#4dabf7' }]} />
               <Text style={styles.legendText}>Vacation</Text>
             </View>
           </View>
+            <View style={{ marginTop: 16, alignItems: 'center' }}>
+              <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                Workhours: {Math.floor(totalHours)}h
+              </Text>
+              <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                Est. earnings: {totalEarnings.toFixed(2)} DKK
+              </Text>
+            </View>
         </View>
       </View>
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
@@ -401,21 +527,16 @@ export default function ShiftsScreen() {
                       shiftDuration ? styles.activeButton : styles.inactiveButton
                     ]}
                     disabled={!shiftDuration}
-                    onPress={() => {
-                      setUpcomingShifts([
-                        ...upcomingShifts,
-                        {
-                          id: (upcomingShifts.length + 1).toString(),
-                          date: requestDate!,
-                          start: requestStart,
-                          end: requestEnd!,
-                          status: 'Pending',
-                        }
-                      ]);
+                    onPress={async () => {
+                      await postShift({
+                        date: requestDate!,
+                        start: requestStart,
+                        end: requestEnd!
+                      });
                       setModalVisible(false);
                     }}
                   >
-                    <Text style={styles.buttonText}>Create shift request</Text>
+                    <Text style={styles.buttonText}>Create shift</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.secondaryButton}
@@ -472,14 +593,11 @@ export default function ShiftsScreen() {
                     style={styles.primaryButton}
                     onPress={() => {
                       setVacationStep('end');
-                      // Set end date to at least one day after start
                       const minEndDate = dayjs(vacationStart).add(1, 'day');
                       if (dayjs(vacationEnd).isBefore(minEndDate)) {
                         setVacationEnd(minEndDate.format('YYYY-MM-DD'));
                       }
-                      // Reset conflict
                       setVacationConflict(null);
-                      // Calculate duration
                       const days = calculateVacationDays(vacationStart, vacationEnd);
                       setVacationDuration(days);
                     }}
@@ -516,10 +634,8 @@ export default function ShiftsScreen() {
                     const start = dayjs(vacationStart);
                     const end = dayjs(value);
                     setVacationConflict(null);
-                    
                     for (const shift of upcomingShifts) {
                       if (shift.status !== 'Scheduled') continue;
-                      
                       const shiftDate = dayjs(shift.date);
                       if ((shiftDate.isAfter(start) || shiftDate.isSame(start, 'day')) && 
                           (shiftDate.isBefore(end) || shiftDate.isSame(end, 'day'))) {
@@ -563,8 +679,6 @@ export default function ShiftsScreen() {
                           status: 'Pending' // init status pending
                         }
                       ]);
-                      
-                      // Reset and close modal
                       setVacationModalVisible(false);
                       setVacationStep('start');
                     }}

@@ -95,7 +95,6 @@ export default function MapScreen() {
   const [locationIntervalActive, setLocationIntervalActive] = useState(false);
   const locationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // When map screen is focused, set a flag in AsyncStorage
   useEffect(() => {
     AsyncStorage.setItem('worker_app_on_map', 'true');
     return () => {
@@ -122,7 +121,6 @@ export default function MapScreen() {
         setUserLocation(start);
         setHeading(location.coords.heading ?? 0);
 
-        // Use coordinates from params if available, otherwise skip destination/route if not present
         let dest: LatLng | null = null;
         if (latitude && longitude) {
           dest = {
@@ -143,7 +141,6 @@ export default function MapScreen() {
           }
         }
         if (!dest) {
-          // No destination provided, just show user location and region
           setDestination(null);
           setRouteCoords([]);
           setRegion({
@@ -342,7 +339,6 @@ export default function MapScreen() {
     }
   };
 
-  // Start/stop sending location_update every 30s if in_transit and on map
   useEffect(() => {
     let isMounted = true;
 
@@ -356,8 +352,7 @@ export default function MapScreen() {
       try {
         currentOrder = currentOrderString ? JSON.parse(currentOrderString) : null;
       } catch {}
-
-      // Only send location if inTransit, onMap, and there is a valid current order
+      console.log('[MapScreen] inTransit:', inTransit, 'onMap:', onMap, 'currentOrder:', currentOrder);
       if (inTransit === 'true' && onMap === 'true' && currentOrder && currentOrder.id && !locationIntervalActive) {
         setLocationIntervalActive(true);
       } else if ((inTransit !== 'true' || onMap !== 'true' || !currentOrder || !currentOrder.id) && locationIntervalActive) {
@@ -373,44 +368,26 @@ export default function MapScreen() {
     };
   }, [locationIntervalActive]);
 
-useEffect(() => {
-  if (locationIntervalActive && userLocation) {
-    if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
-    locationIntervalRef.current = setInterval(async () => {
-      const checkedIn = await AsyncStorage.getItem('worker_app_checked_in');
-      if (checkedIn !== 'true') return; // Only send if checked in
-
-      AsyncStorage.getItem('worker_app_current_order').then(orderStr => {
-        if (orderStr) {
-          console.log('[MapScreen] Sending location update because order exists');
-          sendLocationUpdate(userLocation);
-        }
-      });
-    }, 30000);
-    // Send immediately as well
-    AsyncStorage.getItem('worker_app_checked_in').then(checkedIn => {
-      if (checkedIn === 'true') {
-        AsyncStorage.getItem('worker_app_current_order').then(orderStr => {
-          if (orderStr) {
-            console.log('[MapScreen] Sending location update because order exists');
-            sendLocationUpdate(userLocation);
-          }
-        });
+  useEffect(() => {
+    if (locationIntervalActive && userLocation) {
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = setInterval(() => {
+        sendLocationUpdate(userLocation);
+      }, 30000);
+      sendLocationUpdate(userLocation);
+    } else {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
       }
-    });
-  } else {
-    if (locationIntervalRef.current) {
-      clearInterval(locationIntervalRef.current);
-      locationIntervalRef.current = null;
     }
-  }
-  return () => {
-    if (locationIntervalRef.current) {
-      clearInterval(locationIntervalRef.current);
-      locationIntervalRef.current = null;
-    }
-  };
-}, [locationIntervalActive, userLocation]);
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    };
+  }, [locationIntervalActive, userLocation]);
 
   if (loading || !region) {
     return (
@@ -425,8 +402,6 @@ useEffect(() => {
       <TouchableOpacity style={styles.mapToggleButton} onPress={toggleSidebar}>
         <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
       </TouchableOpacity>
-
-      {/* Dedicated pull-to-refresh zone */}
       <View 
         style={styles.pullRefreshZone}
         onTouchStart={e => setPullStartY(e.nativeEvent.pageY)}
@@ -442,7 +417,6 @@ useEffect(() => {
         }}
       />
 
-      {/* Recenter button - moved below refresh zone for higher zIndex */}
       {!followUser && (
         <TouchableOpacity
           style={styles.recenterButtonContainer}
@@ -465,7 +439,6 @@ useEffect(() => {
         </TouchableOpacity>
       )}
 
-      {/* Pull to refresh indicator */}
       {refreshing && (
         <View style={styles.pullRefreshIndicator}>
           <ActivityIndicator size="small" color={colors.white} />

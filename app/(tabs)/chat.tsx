@@ -24,7 +24,7 @@ type Message = {
   text?: string;
   image?: string;
   sender: string;
-  senderUuid?: string; // <-- add this
+  senderUuid?: string;
   timestamp: string;
   isSender?: boolean;
 };
@@ -146,7 +146,6 @@ export default function ChatPage() {
           console.log('Received message from WS:', data);
 
 if (data.type === 'history' && Array.isArray(data.messages)) {
-  // Log the image fields for each message in history
   data.messages.forEach((msg: any, idx: number) => {
     console.log(
       `History message[${idx}] image:`,
@@ -184,9 +183,6 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
 
           if (data.type === 'message' && data.message) {
             const msgData = data.message;
-            // Log the image field received from backend
-            console.log('Received image in message:', msgData.content?.image, msgData.content?.images);
-
             const msg: Message = {
               id:
                 msgData.id !== undefined && msgData.id !== null
@@ -699,7 +695,7 @@ renderItem={({ item }) => {
             justifyContent: 'center',
             alignItems: 'center'
           }}>
-            <TouchableWithoutFeedback onPress={() => { /* prevent modal close when clicking inside */ }}>
+            <TouchableWithoutFeedback onPress={() => {}}>
               <View style={{
                 backgroundColor: 'white',
                 borderRadius: 12,
@@ -717,7 +713,7 @@ renderItem={({ item }) => {
                         style={[
                           styles.participantRow,
                           selected && styles.participantRowSelected,
-                          { width: 220, alignSelf: 'center' } // Match Add to Chat button width
+                          { width: 220, alignSelf: 'center' }
                         ]}
                         onPress={() => setSelectedToAdd(prev =>
                           prev.includes(col.user_uuid)
@@ -837,7 +833,6 @@ renderItem={({ item }) => {
     </KeyboardAvoidingView>
   );
 
-// Function to add selected participants to the current chat
 const handleAddParticipants = async () => {
   if (!activeRoom) return;
   try {
@@ -882,14 +877,13 @@ const handleAddParticipants = async () => {
   }
 };
 
-  // Handle Android back button to go back to chat list instead of home
   useEffect(() => {
     const onBackPress = () => {
       if (activeRoom) {
         setActiveRoom(null);
-        return true; // Prevent default behavior (going back to index)
+        return true;
       }
-      return false; // Allow default behavior
+      return false;
     };
 
     BackHandler.addEventListener('hardwareBackPress', onBackPress);
@@ -899,7 +893,6 @@ const handleAddParticipants = async () => {
     };
   }, [activeRoom]);
 
-  // Export chat as PDF (move inside component to access state)
 const exportChatAsPDF = async () => {
   console.log('Export chat as PDF started');
   try {
@@ -923,9 +916,6 @@ const exportChatAsPDF = async () => {
       }
       html += `<div><b>${msg.sender}:</b> ${msg.text || ''}${imageHtml}<br/><small>${msg.timestamp}</small></div><hr/>`;
     }
-    console.log('Generated HTML for PDF:', html);
-
-    // Format date as DD-MM-YYYY (not American, 4-digit year)
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -951,17 +941,14 @@ const exportChatAsPDF = async () => {
         );
         console.log('New file URI:', newUri);
 
-        // Read the PDF as a base64 string
         const pdfBase64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        // Write the base64 string to the content URI
         await FileSystem.StorageAccessFramework.writeAsStringAsync(newUri, pdfBase64, { encoding: FileSystem.EncodingType.Base64 });
         console.log('File written to new URI');
         Alert.alert('Chat exported', `Chat was exported as "${fileName}" to the selected folder.`);
         return;
       }
     }
-
-    // Fallback: share as before
+    //fallback method
     console.log('Sharing PDF file:', uri);
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
   } catch (err: any) {
@@ -980,7 +967,7 @@ const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => 
   } else if (type === 'support') {
     setChatType('support');
     setChatModalStep('selectType');
-    handleCreateChat('support'); // Pass type here!
+    handleCreateChat('support');
     setChatTypeModalVisible(false);
   } else {
     setChatModalStep('selectType');

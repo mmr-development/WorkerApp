@@ -4,13 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { styles, colors } from '../styles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { OrderDetails } from '@/app/(tabs)/index'; // <-- Add this import
+import type { OrderDetails } from '@/app/(tabs)/index';
 
 
 const { width } = Dimensions.get('window');
 const SIDEBAR_WIDTH = width * 0.7;
 const SHIFT_STATUS_KEY = 'worker_app_shift_status';
-const CHECKED_IN_KEY = 'worker_app_checked_in'; // Add this
+const CHECKED_IN_KEY = 'worker_app_checked_in';
 
 type SidebarProps = {
   isVisible: boolean;
@@ -38,13 +38,11 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
     }).start();
   }, [isVisible, slideAnim]);
 
-  // Listen for checked-in status changes (poll every second)
   useEffect(() => {
     const interval = setInterval(loadCheckedInStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for currentOrder from AsyncStorage (optional, or pass as prop from HomeScreen)
   useEffect(() => {
     const fetchCurrentOrder = async () => {
       try {
@@ -92,18 +90,16 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
   };
 
   const tryEndShift = async () => {
-    // If there is an active order, warn the user but allow them to proceed
     if (currentOrder) {
       Alert.alert(
         "Active Order",
-        "You have an active order. Are you sure you want to end your shift? This will remove the order.",
+        "You have an active order. Are you sure you want to end your shift?",
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "End Shift",
             style: "destructive",
             onPress: async () => {
-              // Remove order from AsyncStorage
               await AsyncStorage.removeItem('worker_app_current_order');
               setCurrentOrder(null);
               await toggleShift();
@@ -118,7 +114,7 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
 
   const handlePageNavigation = (path: string) => {
     router.push(path);
-    onClose(); // Collapse the sidebar when navigating to a page
+    onClose();
   };
 
   return (
@@ -148,7 +144,6 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
         </View>
 
         <ScrollView style={styles.sidebarLinks}>
-          {/* Orders button - redirects to home */}
           <TouchableOpacity style={styles.sidebarLink} onPress={() => handlePageNavigation('/')}>
             <Ionicons name="list" size={24} color={colors.text} />
             <Text style={styles.sidebarLinkText}>Orders</Text>
@@ -180,7 +175,6 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
           </TouchableOpacity>
         </ScrollView>
 
-        {/* Show checked-in status */}
         <View style={{ alignItems: 'center', marginBottom: 10 }}>
           <Text style={{ color: isCheckedIn ? '#2cb673' : '#e53935', fontWeight: 'bold', fontSize: 16 }}>
           </Text>

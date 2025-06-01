@@ -9,13 +9,13 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as api from '../../api.js';
 import { API_BASE } from '@/constants/API';
-import { connectWebSocket, sendStatusUpdate, sendLocationUpdate, closeWebSocket } from '@/constants/WebSocketManager';
+import { connectWebSocket, sendStatusUpdate, sendLocationUpdate, closeWebSocket, sendLocationResponse } from '@/constants/WebSocketManager';
+import * as TaskManager from 'expo-task-manager';
 
 export type OrderDetails = {
   id: string;
-  orderId?: number; // <-- Add this line
+  orderId?: number;
   restaurant: {
     name: string;
     address: string;
@@ -34,15 +34,28 @@ export type OrderDetails = {
   tipAmount?: number;
   deliveryPhoto?: string;
   contactlessDelivery?: boolean;
-  status?: string; // <--- Add this line
+  status?: string;
 };
 
-// Add storage key for history
 const ORDER_HISTORY_KEY = 'worker_app_order_history';
-const USER_DATA_KEY = 'worker_app_user_data'; // Add this if not already present
+const USER_DATA_KEY = 'worker_app_user_data';
 
-// Add a geocoding cache object outside component
 const geocodeCache: Record<string, { latitude: number; longitude: number }> = {};
+
+const LOCATION_TASK_NAME = 'background-location-task';
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error('Background location task error:', error);
+    return;
+  }
+  if (data) {
+    const { locations } = data as any;
+    if (locations && locations.length > 0) {
+      const { latitude, longitude } = locations[0].coords;
+      sendLocationUpdate({ latitude, longitude });
+    }
+  }
+});
 
 export default function HomeScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
@@ -57,8 +70,6 @@ export default function HomeScreen() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-
-  // Check login status on mount and redirect if not logged in
   useEffect(() => {
     const checkLogin = async () => {
       try {
@@ -78,17 +89,15 @@ export default function HomeScreen() {
     checkLogin();
   }, [router]);
 
-  // Request permission only once when component mounts
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       setLocationPermissionGranted(status === 'granted');
       
       if (status === 'granted') {
-        // Set up a location subscription for faster updates
         const subscription = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced, // Use balanced accuracy (faster)
+            accuracy: Location.Accuracy.Balanced,
             distanceInterval: 10, // Update every 10 meters
             timeInterval: 5000 // Or every 5 seconds
           },
@@ -126,13 +135,11 @@ export default function HomeScreen() {
     return null;
   }, []);
 
-  // Update distances when locations change
   useEffect(() => {
     const updateDistances = async () => {
       if (!currentOrder || !workerLocation) return;
       
       try {
-        // Geocode both addresses in parallel for speed
         const [restaurantLocation, clientLocation] = await Promise.all([
           geocodeAddress(currentOrder.restaurant.address),
           geocodeAddress(currentOrder.client.address)
@@ -187,95 +194,119 @@ export default function HomeScreen() {
 
 const confirmPickup = () => {
   if (currentOrder) {
+    setCurrentOrder(prev =>
+      prev ? { ...prev, pickedUp: true } : prev
+    );
     console.log('[HomeScreen] Confirm Pickup pressed for delivery:', currentOrder.id);
     sendStatusUpdate(currentOrder.id, 'picked_up');
-
-    setCurrentOrder({ ...currentOrder, pickedUp: true });
     if (workerLocation) {
       sendLocationUpdate(workerLocation);
       AsyncStorage.setItem('worker_app_in_transit', 'true');
     }
   }
 };
-  const confirmDelivery = async () => {
-    if (!currentOrder) return;
 
-    try {
-      let photoBase64: string | undefined = undefined;
+const confirmDelivery = async () => {
+  if (!currentOrder) return;
 
-      if (currentOrder.contactlessDelivery) {
-        // Request camera permissions
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            "Camera Permission",
-            "We need camera permission to take delivery confirmation photos for contactless deliveries.",
-            [{ text: "OK" }]
-          );
-          return;
-        }
-
-        // Launch camera
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [4, 3],
-          quality: 0.5,
-          base64: true,
-        });
-
-        if (result.canceled) {
-          Alert.alert(
-            "Photo Required",
-            "A photo confirmation is required for contactless deliveries.",
-            [{ text: "OK" }]
-          );
-          return;
-        }
-
-        photoBase64 = result.assets && result.assets[0].base64 
-          ? `data:image/jpeg;base64,${result.assets[0].base64}`
-          : undefined;
-
-        if (!photoBase64) {
-          Alert.alert(
-            "Photo Required",
-            "Unable to process photo. Please try again.",
-            [{ text: "OK" }]
-          );
-          return;
-        }
-      }
-
-      // Send status update via WebSocket (with photo if contactless)
-      sendStatusUpdate(currentOrder.id, 'delivered');
-
-      // Save to history and clear current order
-      const completedOrder: OrderDetails = {
-        ...currentOrder,
-        completed: true,
-        deliveryTime: new Date().toISOString(),
-        tipped: true,  // For demo
-        tipAmount: 25, // For demo
-        ...(photoBase64 ? { deliveryPhoto: photoBase64 } : {})
-      };
-      await saveOrderToHistory(completedOrder);
-
-      // After delivery is confirmed, close and reopen WebSocket
-      closeWebSocket();
-      setTimeout(() => {
-        connectWebSocket(onMessageHandler);
-      }, 500); // 500ms delay to ensure socket is closed before reconnecting
-
-    } catch (error) {
-      console.error('Error processing delivery:', error);
+  try {
+    // Always require a photo
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
       Alert.alert(
-        "Error",
-        "There was a problem saving this delivery. Please try again.",
+        "Camera Permission",
+        "We need camera permission to take delivery confirmation photos.",
         [{ text: "OK" }]
       );
+      return;
     }
-  };
+
+    // Launch camera
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+      base64: false,
+    });
+
+    if (result.canceled || !result.assets || !result.assets[0].uri) {
+      Alert.alert(
+        "Photo Required",
+        "A photo confirmation is required for deliveries.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    const imageUri = result.assets[0].uri;
+    const filename = imageUri.split('/').pop() || 'delivery.jpg';
+
+    // Upload image to /deliveries/:delivery_id/documentation
+    const accessToken = await AsyncStorage.getItem('worker_app_access_token');
+    const formData = new FormData();
+    formData.append('images', {
+      uri: imageUri,
+      name: filename,
+      type: 'image/jpeg',
+    } as any);
+
+    const uploadRes = await fetch(
+      `${API_BASE}/v1/deliveries/${currentOrder.id}/documentation`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      }
+    );
+    const uploadText = await uploadRes.text();
+    console.log('Delivery documentation upload raw response:', uploadText);
+
+    let uploadData;
+    try {
+      uploadData = JSON.parse(uploadText);
+    } catch (e) {
+      uploadData = uploadText;
+    }
+    console.log('Delivery response:', uploadData);
+
+    if (!uploadRes.ok) {
+      Alert.alert('Upload failed', 'Could not upload delivery documentation. Please try again.');
+      return;
+    }
+
+    // Mark as delivered via WebSocket
+    sendStatusUpdate(currentOrder.id, 'delivered');
+
+    // Save to history and clear current order
+    const completedOrder: OrderDetails = {
+      ...currentOrder,
+      completed: true,
+      deliveryTime: new Date().toISOString(),
+      tipped: true,  // For demo
+      tipAmount: 25, // For demo
+      deliveryPhoto: imageUri,
+    };
+    await saveOrderToHistory(completedOrder);
+
+    // Reconnect WebSocket after finishing the order
+    setTimeout(() => {
+      connectWebSocket(onMessageHandler);
+    }, 500);
+
+  } catch (error) {
+    console.error('Error processing delivery:', error);
+    Alert.alert(
+      "Error",
+      "There was a problem saving this delivery. Please try again.",
+      [{ text: "OK" }]
+    );
+  }
+};
 
   const saveOrderToHistory = async (completedOrder: OrderDetails) => {
     try {
@@ -302,42 +333,22 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
     params: {
       address,
       type,
-      // Swap order: longitude first, then latitude
       longitude: coords ? coords.longitude.toString() : undefined,
       latitude: coords ? coords.latitude.toString() : undefined,
     }
   });
 };
 
-useEffect(() => {
-  let timeout: NodeJS.Timeout | null = null;
 
-  if (!currentOrder) {
-    timeout = setTimeout(() => {
-      console.log('[HomeScreen] No active order for 60s, refreshing WebSocket connection');
-      closeWebSocket();
-      setTimeout(() => {
-        connectWebSocket(onMessageHandler);
-      }, 500);
-    }, 60000);
-  }
-
-  return () => {
-    if (timeout) clearTimeout(timeout);
-  };
-}, [currentOrder]);
-
-  // WebSocket connection for real-time order assignment
   useEffect(() => {
     if (!isCheckedIn) {
       closeWebSocket();
-      setCurrentOrder(null); // Remove order when checking out
+      setCurrentOrder(null);
       return;
     }
     connectWebSocket(onMessageHandler);
   }, [isCheckedIn]);
 
-  // Check check-in status on mount and when it changes in storage
   useEffect(() => {
     const fetchCheckInStatus = async () => {
       const status = await AsyncStorage.getItem('worker_app_checked_in');
@@ -345,8 +356,6 @@ useEffect(() => {
     };
 
     fetchCheckInStatus();
-
-    // Listen for storage changes (in case sidebar or other component changes check-in)
     const interval = setInterval(fetchCheckInStatus, 1000);
 
     return () => clearInterval(interval);
@@ -356,7 +365,6 @@ useEffect(() => {
   const handleStartShift = async () => {
     setCheckingIn(true);
     try {
-      // Send check-in status to backend (adjust endpoint as needed)
       const token = await AsyncStorage.getItem('worker_app_access_token');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -364,7 +372,6 @@ useEffect(() => {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      let data =
       await fetch(`${API_BASE}/courier/checkin`, {
         method: 'POST',
         headers,
@@ -387,27 +394,52 @@ useEffect(() => {
       wsRef.current.close();
       wsRef.current = null;
     }
-    setCurrentOrder(null);
+    setCurrentOrder(null); // Remove order when checking out
   };
 
+  // Save currentOrder to AsyncStorage whenever it changes
 useEffect(() => {
   if (currentOrder) {
     AsyncStorage.setItem('worker_app_current_order', JSON.stringify(currentOrder));
-    AsyncStorage.setItem('worker_app_in_transit', 'true'); // <-- Set flag when order exists
+    AsyncStorage.setItem('worker_app_in_transit', 'true');
   } else {
     AsyncStorage.removeItem('worker_app_current_order');
-    AsyncStorage.setItem('worker_app_in_transit', 'false'); // <-- Remove flag when no order
+    AsyncStorage.setItem('worker_app_in_transit', 'false');
   }
 }, [currentOrder]);
-
-  // Save workerLocation to AsyncStorage whenever it changes
 useEffect(() => {
   if (workerLocation) {
     AsyncStorage.setItem('worker_app_last_location', JSON.stringify(workerLocation));
   }
 }, [workerLocation]);
 
-  // Remove the "not checked in" screen, always show main page
+  // In your useEffect, start background updates when checked in:
+useEffect(() => {
+  if (isCheckedIn) {
+    (async () => {
+      const { status } = await Location.requestBackgroundPermissionsAsync();
+      if (status === 'granted') {
+        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 50, // meters
+          timeInterval: 60000, // ms, e.g., every 1 min
+          showsBackgroundLocationIndicator: true,
+          foregroundService: {
+            notificationTitle: 'WorkerApp',
+            notificationBody: 'Tracking your location for deliveries.',
+          },
+        });
+      }
+    })();
+  } else {
+    Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).then((started) => {
+      if (started) {
+        Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      }
+    });
+  }
+}, [isCheckedIn]);
+
   if (!currentOrder) {
     return (
       <ThemedView style={styles.container}>
@@ -447,8 +479,6 @@ useEffect(() => {
         >
           <Ionicons name={sidebarVisible ? "close" : "menu"} size={24} color={colors.text} />
         </TouchableOpacity>
-        
-        {/* Add new chat icon button */}
         <TouchableOpacity 
           style={styles.chatButton}
           onPress={() => router.push('/chat')}
@@ -460,7 +490,6 @@ useEffect(() => {
         
         
         <ScrollView style={styles.ordersMainList} contentContainerStyle={styles.ordersContentContainer}>
-          {/* Restaurant pickup details */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
               <Ionicons name="restaurant" size={24} color={colors.primary} />
@@ -517,7 +546,6 @@ useEffect(() => {
             </TouchableOpacity>
           </View>
           
-          {/* Client delivery details */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
               <Ionicons name="person" size={24} color={colors.primary} />
@@ -535,7 +563,6 @@ useEffect(() => {
                 onPress={async () => {
                   if (currentOrder.pickedUp) {
                     await AsyncStorage.setItem('worker_app_in_transit', 'true');
-                    // Send status update to in_transit
                     sendStatusUpdate(currentOrder.id, 'in_transit');
                     navigateToMap(currentOrder.client.address, 'client');
                     if (workerLocation) {
@@ -619,6 +646,7 @@ useEffect(() => {
         </ScrollView>
       </View>
 
+      {/* Sidebar Component */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
   );
@@ -649,8 +677,9 @@ useEffect(() => {
     };
   }
 
-function onMessageHandler(data: any) {
-  console.log('[HomeScreen] WebSocket message received:', data);
+  function onMessageHandler(data: any) {
+    console.log('[HomeScreen] WebSocket message received:', data);
+
     if (data.type === 'order_assigned' && data.payload) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload));
       console.log('[HomeScreen] Updated currentOrder from order_assigned:', data.payload);
@@ -659,13 +688,29 @@ function onMessageHandler(data: any) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from current_deliveries:', data.payload.deliveries[0]);
     }
-    if (data.type === 'status_update' && data.payload?.deliveries?.length > 0) {
-      setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
-      console.log('[HomeScreen] Updated currentOrder from status_update:', data.payload.deliveries[0]);
-    }
+    // Add this block:
     if (data.type === 'delivery_assigned' && data.payload?.deliveries?.length > 0) {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from delivery_assigned:', data.payload.deliveries[0]);
+    }
+    // Handle location_request
+    if (data.type === 'location_request') {
+      const requestId = data.payload?.request_id;
+      if (requestId !== undefined) {
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+          .then(location => {
+            sendLocationResponse(
+              { latitude: location.coords.latitude, longitude: location.coords.longitude },
+              requestId
+            );
+            console.log('[HomeScreen] Sent fresh location_response for request_id:', requestId, location.coords);
+          })
+          .catch(err => {
+            console.log('[HomeScreen] Failed to get current position for location_request', err);
+          });
+      } else {
+        console.log('[HomeScreen] No request_id for location_request');
+      }
     }
   }
 }

@@ -23,8 +23,6 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Change password modal state
   const [changePwModalVisible, setChangePwModalVisible] = useState(false);
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -149,7 +147,6 @@ const toggleNotifications = () => {
             password
           })
         });
-      // Log status and response body
       const responseText = await response.text();
       console.log('Sign-in response status:', response.status);
       console.log('Sign-in response body:', responseText);
@@ -163,7 +160,7 @@ const toggleNotifications = () => {
       await saveTokens(data.access_token, data.refresh_token);
       setEmail(email);
       setPassword('');
-      await sendPushToken(); // <-- Register push token after login
+      await sendPushToken();
     } catch (error) {
       let message = 'Sign-in Failed. Please check your credentials and try again.';
       if (
@@ -171,7 +168,7 @@ const toggleNotifications = () => {
         error.message &&
         error.message.includes('Network request failed')
       ) {
-        message = 'Could not connect to the server. Please check your internet connection or VPN, and ensure the server is reachable.';
+        message = 'Could not connect to the server.';
       }
       Alert.alert('Sign-in Error', message);
     } finally {
@@ -184,7 +181,7 @@ const toggleNotifications = () => {
       setIsLoggedIn(false);
       setEmail('');
       await AsyncStorage.removeItem(USER_DATA_KEY);
-      await clearTokens(); // Use the utility function
+      await clearTokens();
       return;
     }
     try {
@@ -201,7 +198,7 @@ const toggleNotifications = () => {
     setIsLoggedIn(false);
     setEmail('');
     await AsyncStorage.removeItem(USER_DATA_KEY);
-    await clearTokens(); // Use the utility function
+    await clearTokens();
     setRefreshToken(null);
   };
 
@@ -225,7 +222,7 @@ const toggleNotifications = () => {
   const clearOrderHistory = async () => {
     Alert.alert(
       "Clear Order History",
-      "Are you sure you want to delete all order history? This action cannot be undone.",
+      "Are you sure you want to delete all order history?",
       [
         { text: "Cancel", style: "cancel" },
         { 
@@ -287,7 +284,6 @@ const toggleNotifications = () => {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.mainContent}>
-        {/* Only show sidebar toggle button if logged in */}
         {isLoggedIn && (
           <TouchableOpacity 
             style={styles.toggleButton}
@@ -309,7 +305,6 @@ const toggleNotifications = () => {
             </View>
           </View>
 
-          {/* Only show notifications toggle, sidebar button, and clear order history if logged in */}
           {isLoggedIn && (
             <>
               <View style={styles.settingItemWide}>
@@ -402,7 +397,6 @@ const toggleNotifications = () => {
             </>
           )}
 
-          {/* Only show clear order history if logged in */}
           {isLoggedIn && (
             <TouchableOpacity 
               style={[styles.loginButtonSettings, { backgroundColor: "#e53935", marginTop: 20 }]}
@@ -415,7 +409,6 @@ const toggleNotifications = () => {
         </ScrollView>
       </View>
 
-      {/* Change Password Modal */}
       <Modal
         visible={changePwModalVisible}
         animationType="slide"
@@ -486,7 +479,6 @@ const toggleNotifications = () => {
           </View>
         </View>
       </Modal>
-
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
   );
