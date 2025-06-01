@@ -96,8 +96,15 @@ export async function connectWebSocket(
     }
   };
 
-  ws.onerror = (err) => {
+  ws.onerror = async (err: any) => {
     console.log('WebSocket error in WSM:', err);
+    if (err?.message && err.message.includes('401')) {
+      console.log('[WebSocketManager] WebSocket handshake 401');
+      await api.reauthenticate();
+      tryReconnect(messageHandler ?? undefined, lastOnClose || undefined, lastOnError || undefined);
+      return;
+    }
+
     if (onError) onError(err);
     ws?.close();
   };
