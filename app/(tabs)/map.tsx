@@ -48,7 +48,6 @@ function interpolatePoints(a: LatLng, b: LatLng, step = 10): LatLng[] {
   return points;
 }
 
-// Helper: generate micropoints for the whole route
 function generateMicropoints(route: LatLng[]): LatLng[] {
   let micropoints: LatLng[] = [];
   for (let i = 0; i < route.length - 1; i++) {
@@ -57,7 +56,6 @@ function generateMicropoints(route: LatLng[]): LatLng[] {
   return micropoints;
 }
 
-// Helper: find index of closest point on route to user
 function getClosestPointIndex(user: LatLng, route: LatLng[]) {
   let minDist = Infinity;
   let minIdx = 0;
@@ -184,7 +182,6 @@ export default function MapScreen() {
         );
         setRouteCoords(coords);
 
-        // Subscribe to location updates
         locationSubscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
@@ -461,7 +458,7 @@ export default function MapScreen() {
           <Marker
             coordinate={userLocation}
             title="You"
-            pinColor={colors.primary} // Use company green
+            pinColor={colors.primary}
             rotation={followUser ? 180 : (heading ?? 0)}
             anchor={{ x: 0.5, y: 0.5 }}
           />
@@ -470,7 +467,7 @@ export default function MapScreen() {
           <Marker
             coordinate={destination}
             title="Destination"
-            pinColor={colors.accent} // Use accent green
+            pinColor={colors.accent}
           />
         )}
         {routeCoords.length > 0 && userLocation && (

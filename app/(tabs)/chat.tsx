@@ -131,11 +131,6 @@ export default function ChatPage() {
 
 if (data.type === 'history' && Array.isArray(data.messages)) {
   data.messages.forEach((msg: any, idx: number) => {
-    console.log(
-      `History message[${idx}] image:`,
-      msg.content?.image,
-      msg.content?.images
-    );
       });
 
       const history: Message[] = data.messages.map((msg: any, idx: number) => ({
@@ -250,7 +245,7 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
       }
 
       let responseBody = await api.post(endpoint, payload).then((res) => {
-        if (res.status === 200) {
+        if (res.status === 201) {
           return res.data;
         } else {
           throw new Error(res.data?.detail || res.data?.message || 'Failed to create chat');
@@ -330,8 +325,6 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
 
       const uploadResult = await uploadImage(imageUri, filename);
       console.log('Upload image endpoint returned:', uploadResult);
-
-      // Only send if backend returned a valid URL
       const uploadedUrl = uploadResult?.images?.[0]?.url;
       if (!uploadedUrl) {
         Alert.alert('Upload failed', 'Could not upload image. Please try again.');
@@ -475,7 +468,7 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
                       style={[
                         styles.participantRow,
                         selectedColleagues.includes(col.user_uuid) && styles.participantRowSelected,
-                        { width: 200, alignSelf: 'center' } // Match Add to Chat button width
+                        { width: 200, alignSelf: 'center' }
                       ]}
                       onPress={() => toggleColleague(col.user_uuid)}
                       activeOpacity={0.7}
@@ -840,16 +833,32 @@ const exportChatAsPDF = async () => {
         if (msg.image.startsWith('file://')) {
           try {
             const base64 = await FileSystem.readAsStringAsync(msg.image, { encoding: FileSystem.EncodingType.Base64 });
-            imageHtml = `<br/><img src="data:image/jpeg;base64,${base64}" width="200"/>`;
+            imageHtml = `<br/><img src="data:image/jpeg;base64,${base64}" style="max-width:100%;height:auto;"/><br/>`;
           } catch (e) {
             console.log('Failed to read image for export:', msg.image, e);
             imageHtml = `<br/><i>[Image could not be exported]</i>`;
           }
         } else {
-          imageHtml = `<br/><img src="${msg.image}" width="200"/>`;
+          let imageUrl = msg.image;
+          if (msg.image.startsWith('/')) {
+            imageUrl = api.baseurl + 'public' + msg.image;
+          }
+          try {
+            // Download the image to a local file
+            const downloadRes = await FileSystem.downloadAsync(
+              imageUrl,
+              FileSystem.cacheDirectory + 'pdfimg_' + Date.now() + '.jpg'
+            );
+            const base64 = await FileSystem.readAsStringAsync(downloadRes.uri, { encoding: FileSystem.EncodingType.Base64 });
+            imageHtml = `<br/><img src="data:image/jpeg;base64,${base64}" style="max-width:100%;height:auto;"/><br/>`;
+          } catch (e) {
+            console.log('Failed to fetch remote image for export:', imageUrl, e);
+            imageHtml = `<br/><i>[Image could not be exported]</i>`;
+          }
         }
       }
-      html += `<div><b>${msg.sender}:</b> ${msg.text || ''}${imageHtml}<br/><small>${msg.timestamp}</small></div><hr/>`;
+      let textHtml = msg.text ? msg.text : (msg.image ? '[Image]' : '');
+      html += `<div><b>${msg.sender}:</b> ${textHtml}${imageHtml}<br/><small>${msg.timestamp}</small></div><hr/>`;
     }
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
@@ -892,7 +901,6 @@ const exportChatAsPDF = async () => {
   }
 };
 
-// Add this inside ChatPage, above return
 const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => {
   setChatTypeModalVisible(true);
   if (type === 'general') {
@@ -909,7 +917,6 @@ const createChatRoom = (type?: 'support' | 'general' | 'order' | 'delivery') => 
   }
 };
 
-// Toggle colleague selection for general chat
 const toggleColleague = (uuid: string) => {
   setSelectedColleagues(prev =>
     prev.includes(uuid)

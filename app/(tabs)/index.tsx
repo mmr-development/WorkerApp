@@ -10,7 +10,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as api from '@/constants/API';
-import { connectWebSocket, sendStatusUpdate, sendLocationUpdate, closeWebSocket, sendLocationResponse } from '@/constants/WebSocketManager';
+import {
+  connectWebSocket,
+  sendStatusUpdate,
+  sendLocationUpdate,
+  closeWebSocket,
+  sendLocationResponse,
+  setShouldReconnect // <-- import the new function
+} from '@/constants/WebSocketManager';
 import * as TaskManager from 'expo-task-manager';
 
 export type OrderDetails = {
@@ -98,15 +105,13 @@ export default function HomeScreen() {
         const subscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 10, // Update every 10 meters
-            timeInterval: 5000 // Or every 5 seconds
+            distanceInterval: 10,
+            timeInterval: 5000
           },
           (location) => {
             setWorkerLocation(location.coords);
           }
         );
-        
-        // Clean up subscription when component unmounts
         return () => {
           subscription.remove();
         };
@@ -114,7 +119,6 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // Geocode function with caching
   const geocodeAddress = useCallback(async (address: string) => {
     if (!address || address === 'string') return null;
     if (geocodeCache[address]) {
@@ -210,7 +214,6 @@ const confirmDelivery = async () => {
   if (!currentOrder) return;
 
   try {
-    // Always require a photo
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(
@@ -241,7 +244,6 @@ const confirmDelivery = async () => {
 
     const imageUri = result.assets[0].uri;
     const filename = imageUri.split('/').pop() || 'delivery.jpg';
-
     const formData = new FormData();
     formData.append('images', {
       uri: imageUri,
@@ -250,19 +252,23 @@ const confirmDelivery = async () => {
     } as any);
     let res = await api.postImage(`deliveries/${currentOrder.id}/documentation/`, formData);
     console.log('Image upload response:', res);
-      if (res.status === 200 || res.status === 201) {
-        let uploadData = res.data;
-      } else {
-        throw new Error('Failed to upload delivery documentation');
-      }
-
-    sendStatusUpdate(currentOrder.id, 'delivered');
-
-    // Reconnect WebSocket after finishing the order
-    setTimeout(() => {
-      connectWebSocket(onMessageHandler);
-    }, 500);
-
+    if (res.status === 200 || res.status === 201) {
+      let uploadData = res.data;
+      sendStatusUpdate(currentOrder.id, 'delivered');
+      const completedOrder = {
+        ...currentOrder,
+        completed: true,
+        deliveryPhoto: imageUri,
+        deliveryTime: new Date().toISOString(),
+      };
+      await saveOrderToHistory(completedOrder);
+      setCurrentOrder(null);
+      setTimeout(() => {
+        connectWebSocket(onMessageHandler);
+      }, 500);
+    } else {
+      throw new Error('Failed to upload delivery documentation');
+    }
   } catch (error) {
     console.error('Error processing delivery:', error);
     Alert.alert(
@@ -307,10 +313,12 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
 
   useEffect(() => {
     if (!isCheckedIn) {
+      setShouldReconnect(false); // Prevent reconnection if not checked in
       closeWebSocket();
       setCurrentOrder(null);
       return;
     }
+    setShouldReconnect(true); // Allow reconnection if checked in
     connectWebSocket(onMessageHandler);
   }, [isCheckedIn]);
 
@@ -326,13 +334,13 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
     return () => clearInterval(interval);
   }, []);
 
-  // "Start Shift" handler
   const handleStartShift = async () => {
     setCheckingIn(true);
     try {
       await api.post('courier/checkin', { checked_in: true });
       setIsCheckedIn(true);
       await AsyncStorage.setItem('worker_app_checked_in', 'true');
+      setShouldReconnect(true); // Allow reconnection when checked in
       wsRef.current?.send(JSON.stringify({ type: 'checked_in', payload: { checked_in: true } }));
     } catch (err) {
       Alert.alert('Error', 'Failed to check in. Try again.');
@@ -343,6 +351,7 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
   const handleEndShift = async () => {
     setIsCheckedIn(false);
     await AsyncStorage.setItem('worker_app_checked_in', 'false');
+    setShouldReconnect(false); // Prevent reconnection when checked out
     if (wsRef.current) {
       console.log('[HomeScreen] Closing WebSocket connection (end shift)');
       wsRef.current.close();
@@ -366,7 +375,6 @@ useEffect(() => {
   }
 }, [workerLocation]);
 
-  // In your useEffect, start background updates when checked in:
 useEffect(() => {
   if (isCheckedIn) {
     (async () => {
@@ -375,7 +383,7 @@ useEffect(() => {
         await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
           accuracy: Location.Accuracy.Balanced,
           distanceInterval: 50, // meters
-          timeInterval: 60000, // ms, e.g., every 1 min
+          timeInterval: 60000, // 60 s
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: 'WorkerApp',
@@ -581,8 +589,6 @@ useEffect(() => {
               <Text style={styles.actionButtonText}>Confirm Delivery</Text>
             </TouchableOpacity>
           </View>
-          
-          {/* Order items */}
           <View style={styles.orderCard}>
             <View style={styles.orderCardHeader}>
               <Ionicons name="fast-food" size={24} color={colors.primary} />
@@ -598,8 +604,6 @@ useEffect(() => {
           </View>
         </ScrollView>
       </View>
-
-      {/* Sidebar Component */}
       <Sidebar isVisible={sidebarVisible} onClose={closeSidebar} />
     </ThemedView>
   );
@@ -644,7 +648,6 @@ useEffect(() => {
       setCurrentOrder(mapDeliveryToOrderDetails(data.payload.deliveries[0]));
       console.log('[HomeScreen] Updated currentOrder from delivery_assigned:', data.payload.deliveries[0]);
     }
-    // Handle location_request
     if (data.type === 'location_request') {
       const requestId = data.payload?.request_id;
       if (requestId !== undefined) {

@@ -188,9 +188,9 @@ export const postImage = async (path: string, data: FormData, tried: boolean = f
 }
 
 export const clockIn = async () => {
-  return post('courier/clock-in', {});
+  return post('courier/clock-in/', {});
 };
 
 export const clockOut = async () => {
-  return post('courier/clock-out', {});
+  return post('courier/clock-out/', {});
 };

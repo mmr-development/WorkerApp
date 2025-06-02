@@ -12,11 +12,21 @@ let lastOnClose: (() => void) | null = null;
 let lastOnError: ((err: any) => void) | null = null;
 let locationInterval: NodeJS.Timeout | null = null;
 
+let shouldReconnect = true; // Add this flag to control reconnection
+
+export function setShouldReconnect(value: boolean) {
+  shouldReconnect = value;
+}
+
 function tryReconnect(
   onMessage?: WebSocketEventHandler,
   onClose?: () => void,
   onError?: (err: any) => void
 ) {
+  if (!shouldReconnect) {
+    console.log('[WebSocketManager] Not reconnecting: shouldReconnect is false');
+    return;
+  }
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
   reconnectTimeout = setTimeout(() => {
     connectWebSocket(
@@ -128,6 +138,7 @@ export function getWebSocket() {
 }
 
 export function closeWebSocket() {
+  shouldReconnect = false; // Prevent reconnection on manual close
   if (ws) {
     ws.close();
     ws = null;
