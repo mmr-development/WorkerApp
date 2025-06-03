@@ -252,6 +252,7 @@ const toggleNotifications = () => {
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
+      handleLogout(); // Log out after password change
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to change password.');
     } finally {

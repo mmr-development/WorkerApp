@@ -33,7 +33,6 @@ function getDistance(a: LatLng, b: LatLng) {
   return R * c;
 }
 
-// Helper: interpolate points every 10m between two coordinates
 function interpolatePoints(a: LatLng, b: LatLng, step = 10): LatLng[] {
   const dist = getDistance(a, b);
   if (dist <= 20) return [];

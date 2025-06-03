@@ -16,7 +16,7 @@ import {
   sendLocationUpdate,
   closeWebSocket,
   sendLocationResponse,
-  setShouldReconnect // <-- import the new function
+  setShouldReconnect
 } from '@/constants/WebSocketManager';
 import * as TaskManager from 'expo-task-manager';
 
@@ -178,10 +178,10 @@ export default function HomeScreen() {
     updateDistances();
   }, [currentOrder, workerLocation, geocodeAddress]);
 
-  // Haversine formula for distance in km
+  // Haversine formula for distance
   function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     const toRad = (value: number) => (value * Math.PI) / 180;
-    const R = 6371; // km
+    const R = 6371; // Radius of the Earth in km
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
     const a =
@@ -225,7 +225,7 @@ const confirmDelivery = async () => {
     }
 
     // Launch camera
-    const result = await ImagePicker.launchCameraAsync({
+    const result = await ImagePicker.launchCameraAsync({  
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
@@ -313,12 +313,12 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
 
   useEffect(() => {
     if (!isCheckedIn) {
-      setShouldReconnect(false); // Prevent reconnection if not checked in
+      setShouldReconnect(false);
       closeWebSocket();
       setCurrentOrder(null);
       return;
     }
-    setShouldReconnect(true); // Allow reconnection if checked in
+    setShouldReconnect(true);
     connectWebSocket(onMessageHandler);
   }, [isCheckedIn]);
 
@@ -340,7 +340,7 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
       await api.post('courier/checkin', { checked_in: true });
       setIsCheckedIn(true);
       await AsyncStorage.setItem('worker_app_checked_in', 'true');
-      setShouldReconnect(true); // Allow reconnection when checked in
+      setShouldReconnect(true);
       wsRef.current?.send(JSON.stringify({ type: 'checked_in', payload: { checked_in: true } }));
     } catch (err) {
       Alert.alert('Error', 'Failed to check in. Try again.');
@@ -351,7 +351,7 @@ const navigateToMap = (address: string, type: 'restaurant' | 'client') => {
   const handleEndShift = async () => {
     setIsCheckedIn(false);
     await AsyncStorage.setItem('worker_app_checked_in', 'false');
-    setShouldReconnect(false); // Prevent reconnection when checked out
+    setShouldReconnect(false);
     if (wsRef.current) {
       console.log('[HomeScreen] Closing WebSocket connection (end shift)');
       wsRef.current.close();

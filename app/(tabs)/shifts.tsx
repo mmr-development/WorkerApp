@@ -15,6 +15,15 @@ interface VacationPeriod {
   status: 'Pending' | 'Approved';
 }
 
+const initialVacations: VacationPeriod[] = [
+  {
+    id: '1',
+    start: '2025-05-11',
+    end: '2025-05-14',
+    status: 'Approved'
+  }
+];
+
 export default function ShiftsScreen() {
   const { sidebarVisible, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -32,7 +41,7 @@ export default function ShiftsScreen() {
   const [vacationDuration, setVacationDuration] = useState<number>(1);
   const [vacationStep, setVacationStep] = useState<'start' | 'end'>('start');
   const [vacationConflict, setVacationConflict] = useState<string | null>(null);
-  const [vacations, setVacations] = useState<VacationPeriod[]>([]);
+  const [vacations, setVacations] = useState<VacationPeriod[]>(initialVacations);
   const [loadedMonth, setLoadedMonth] = useState(dayjs().format('YYYY-MM'));
 
   const hourOptions = Array.from({ length: 15 }, (_, h) => {
@@ -56,14 +65,17 @@ export default function ShiftsScreen() {
     return diff > 0 ? diff : 1;
   }
 
+  // Calculate the start and end of the currently viewed week and month
   const selectedWeekStart = dayjs().startOf('week').add(1, 'day').add(weekOffset, 'week');
   const selectedMonth = selectedWeekStart.format('YYYY-MM');
   const fetchStart = selectedWeekStart.startOf('month').startOf('day');
   const fetchEnd = selectedWeekStart.endOf('month').endOf('day');
+
+  // Calculate the start of the previous week and end of the next week
   const baseWeek = dayjs().startOf('week').add(1, 'day'); // Monday
   const startOfCurrentWeek = baseWeek.add(weekOffset, 'week');
   const startOfPrevWeek = startOfCurrentWeek.subtract(7, 'day');
-  const endOfNextWeek = startOfCurrentWeek.add(13, 'day'); // 7 days current + 7 days next
+  const endOfNextWeek = startOfCurrentWeek.add(13, 'day'); // 7 days current + 7 days next - 1
 
   const selectedDay = dayjs(selectedDate);
   const weekDaysVertical = [];
@@ -91,6 +103,7 @@ export default function ShiftsScreen() {
              (current.isBefore(end) || current.isSame(end, 'day'));
     });
 
+    // Check if this is a pending vacation day
     const isPendingVacation = isVacationDay && vacation?.status === 'Pending';
 
     let shiftDuration = '';
@@ -250,6 +263,7 @@ export default function ShiftsScreen() {
     });
     console.log('[Shifts] GET', url, data);
 
+    // Map API shifts to UI format
     const mappedShifts = (data.schedules || []).map((s: any) => {
       const start = dayjs(s.start_datetime);
       const end = dayjs(s.end_datetime);
@@ -280,7 +294,6 @@ export default function ShiftsScreen() {
   });
   console.log('[Vacation] POST Response:', data);
   await fetchShifts();
-  await fetchVacations();
   return data;
 }
 
@@ -294,7 +307,6 @@ async function fetchVacations() {
     }
     throw new Error(`Failed to fetch vacations: ${res.status}`);
   });
-  console.log('[Vacations] GET', url, data);
   const mappedVacations = (data.schedules || []).map((v: any) => ({
     id: v.id.toString(),
     start: v.start_datetime.slice(0, 10),
@@ -307,7 +319,7 @@ async function fetchVacations() {
   useEffect(() => {
     if (loadedMonth !== selectedMonth) {
       fetchShifts();
-      fetchVacations();
+      fetchVacations(); 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
@@ -324,9 +336,7 @@ async function fetchVacations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
-  // Prevent scheduling a shift on a day that already has a shift
   async function postShift({ date, start, end }: { date: string, start: string, end: string }) {
-    // Check if a shift already exists for this date
     const alreadyScheduled = upcomingShifts.some(s => s.date === date);
     if (alreadyScheduled) {
       alert('You already have a shift scheduled for this day.');
@@ -396,7 +406,7 @@ async function fetchVacations() {
       totalEarnings += hours * basePay + bonusHours * midnightBonus;
     });
 
-  // debug
+  // Count vacation hours (for debug/logging only)
   vacations.forEach(vac => {
     const vacStart = dayjs(vac.start);
     const vacEnd = dayjs(vac.end);

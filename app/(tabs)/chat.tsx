@@ -355,30 +355,42 @@ if (data.type === 'history' && Array.isArray(data.messages)) {
     }
   };
 
-  const uploadImage = async (imageUri: string, filename: string) => {
-    const accessToken = await api.getAccessToken();
-    if (!accessToken) {
-      Alert.alert('Authorization Error', 'You must be logged in to upload images.');
-      return;
+const uploadImage = async (imageUri: string, filename: string) => {
+  const accessToken = await api.getAccessToken();
+  if (!accessToken) {
+    Alert.alert('Authorization Error', 'You must be logged in to upload images.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('images', {
+    uri: imageUri,
+    name: filename,
+    type: 'image/jpeg',
+  } as any);
+
+  console.log('[Chat] Sending image to API.postImage:', {
+    path: 'chats/upload-images/',
+    formData,
+    accessToken,
+  });
+
+  const data = await api.postImage('chats/upload-images/', formData).then((res) => {
+    console.log('[Chat] API.postImage response:', res);
+    if (res.status === 200) {
+      return res.data;
+    } else {
+      console.log('[Chat] API.postImage error:', res);
+      throw new Error(res.data?.detail || res.data?.message || 'Failed to upload image');
     }
+  }).catch(err => {
+    console.log('[Chat] API.postImage caught error:', err);
+    throw err;
+  });
 
-    const formData = new FormData();
-    formData.append('images', {
-      uri: imageUri,
-      name: filename,
-      type: 'image/jpeg',
-    } as any);
-
-    const data = await api.postImage('chats/upload-images/', formData).then((res) => {
-      if (res.status === 200) {
-        return res.data;
-      } else {
-        throw new Error(res.data?.detail || res.data?.message || 'Failed to upload image');
-      }
-    });
-    console.log('Upload image endpoint returned:', data);
-    return data;
-  };
+  console.log('[Chat] Upload image endpoint returned:', data);
+  return data;
+};
 
   const renderChatRoomList = () => (
     <View style={styles.container}>
@@ -844,7 +856,6 @@ const exportChatAsPDF = async () => {
             imageUrl = api.baseurl + 'public' + msg.image;
           }
           try {
-            // Download the image to a local file
             const downloadRes = await FileSystem.downloadAsync(
               imageUrl,
               FileSystem.cacheDirectory + 'pdfimg_' + Date.now() + '.jpg'

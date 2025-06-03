@@ -77,27 +77,31 @@ export function Sidebar({ isVisible, onClose }: SidebarProps) {
     }
   };
 
-  const toggleShift = async () => {
-    const newStatus = !shiftActive;
-    setShiftActive(newStatus);
-    try {
-      if (newStatus) {
-        await api.clockIn();
-        await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'true');
-        await AsyncStorage.setItem(CHECKED_IN_KEY, 'true');
-        setIsCheckedIn(true);
-        console.log('[Sidebar] Clocked in');
-      } else {
-        await api.clockOut();
-        await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'false');
-        await AsyncStorage.setItem(CHECKED_IN_KEY, 'false');
-        setIsCheckedIn(false);
-        console.log('[Sidebar] Clocked out');
-      }
-    } catch (error) {
-      console.error('Error toggling shift:', error);
+const toggleShift = async () => {
+  const newStatus = !shiftActive;
+  setShiftActive(newStatus);
+  try {
+    if (newStatus) {
+      const endpoint = api.baseurl + 'v1/courier/clock-in/';
+      console.log('[ClockIn] POST endpoint:', endpoint);
+      await api.clockIn();
+      await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'true');
+      await AsyncStorage.setItem(CHECKED_IN_KEY, 'true');
+      setIsCheckedIn(true);
+      console.log('[Sidebar] Clocked in');
+    } else {
+      const endpoint = api.baseurl + 'v1/courier/clock-out/';
+      console.log('[ClockOut] POST endpoint:', endpoint);
+      await api.clockOut();
+      await AsyncStorage.setItem(SHIFT_STATUS_KEY, 'false');
+      await AsyncStorage.setItem(CHECKED_IN_KEY, 'false');
+      setIsCheckedIn(false);
+      console.log('[Sidebar] Clocked out');
     }
-  };
+  } catch (error) {
+    console.error('Error toggling shift:', error);
+  }
+};
 
   const tryEndShift = async () => {
     if (currentOrder) {
