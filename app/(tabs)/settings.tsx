@@ -141,6 +141,7 @@ const toggleNotifications = () => {
         if (res.status == 200) {
           return res.data;
         }
+        console.log(res.data)
         throw new Error(`HTTP error! Status: ${res.status}`);
       });
       setIsLoggedIn(true);

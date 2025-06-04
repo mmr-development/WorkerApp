@@ -12,7 +12,7 @@ let lastOnClose: (() => void) | null = null;
 let lastOnError: ((err: any) => void) | null = null;
 let locationInterval: NodeJS.Timeout | null = null;
 
-let shouldReconnect = true; // Add this flag to control reconnection
+let shouldReconnect = true;
 
 export function setShouldReconnect(value: boolean) {
   shouldReconnect = value;

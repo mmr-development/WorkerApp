@@ -129,36 +129,36 @@ export default function ChatPage() {
         try {
           console.log('Received message from WS:', data);
 
-if (data.type === 'history' && Array.isArray(data.messages)) {
-  data.messages.forEach((msg: any, idx: number) => {
-      });
+        if (data.type === 'history' && Array.isArray(data.messages)) {
+          data.messages.forEach((msg: any, idx: number) => {
+              });
 
-      const history: Message[] = data.messages.map((msg: any, idx: number) => ({
-        id: msg.id !== undefined && msg.id !== null
-          ? String(msg.id)
-          : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
-        text: msg.content?.text,
-        image:
-          Array.isArray(msg.content?.images) && msg.content.images.length > 0
-            ? msg.content.images[0].url
-            : msg.content?.image,
-        sender:
-          (msg.sender_id === userUuid || msg.user_uuid === userUuid)
-            ? 'You'
-            : (msg.first_name && msg.last_name
-                ? `${msg.first_name} ${msg.lastName}`
-                : msg.sender_id || msg.user_uuid || 'User'),
-        senderUuid: msg.sender_id || msg.user_uuid,
-        timestamp: msg.created_at,
-        isSender: msg.isSender !== undefined
-          ? msg.isSender
-          : (msg.sender_id === userUuid || msg.user_uuid === userUuid),
-      }));
-      setMessages((prev) => ({
-        ...prev,
-        [activeRoom.id]: history,
-      }));
-    }
+              const history: Message[] = data.messages.map((msg: any, idx: number) => ({
+                id: msg.id !== undefined && msg.id !== null
+                  ? String(msg.id)
+                  : `history-${msg.created_at || idx}-${Math.random().toString(36).substr(2, 9)}`,
+                text: msg.content?.text,
+                image:
+                  Array.isArray(msg.content?.images) && msg.content.images.length > 0
+                    ? msg.content.images[0].url
+                    : msg.content?.image,
+                sender:
+                  (msg.sender_id === userUuid || msg.user_uuid === userUuid)
+                    ? 'You'
+                    : (msg.first_name && msg.last_name
+                        ? `${msg.first_name} ${msg.lastName}`
+                        : msg.sender_id || msg.user_uuid || 'User'),
+                senderUuid: msg.sender_id || msg.user_uuid,
+                timestamp: msg.created_at,
+                isSender: msg.isSender !== undefined
+                  ? msg.isSender
+                  : (msg.sender_id === userUuid || msg.user_uuid === userUuid),
+              }));
+              setMessages((prev) => ({
+                ...prev,
+                [activeRoom.id]: history,
+              }));
+            }
 
           if (data.type === 'message' && data.message) {
             const msgData = data.message;
